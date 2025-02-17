@@ -184,3 +184,7 @@ gcp-login.json
 *.txt
 *.pdf
 *.csv
+
+# Supabase service account keys
+prod-deploy-svc-acc.json
+staging-deploy-svc-acc.json
