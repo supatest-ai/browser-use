@@ -16,7 +16,7 @@ from browser_use import ActionResult, Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
 from browser_use.browser.context import BrowserContext
 
-async def run_automation(connection_url, task, send_message, goal_step_id):
+async def run_automation(connection_url, task, send_message, goal_step_id, requestId, testCaseId):
         # Initialize browser with received connection URL
         browser = Browser(
             config=BrowserConfig(
@@ -43,7 +43,9 @@ async def run_automation(connection_url, task, send_message, goal_step_id):
             llm=model,
             browser=browser,
             send_message=send_message,
-            goal_step_id=goal_step_id
+            goal_step_id=goal_step_id,
+            requestId=requestId,
+            testCaseId=testCaseId
         )
         
         # Run the automation task

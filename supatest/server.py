@@ -154,36 +154,46 @@ class AutomationServer:
                 except Exception as e:
                     logger.error(f"Failed to send message: {str(e)}")
                     return False
+        
+            # Run automation task and get completion status
+            success = await run_automation(connection_url, task, send_message, goal_id, requestId, testCaseId)
+            logger.info(f"Automation completed with success: {success}")
 
-            # Run automation task
-            await run_automation(connection_url, task, send_message, goal_id)
-            
-            # Send completion message
-            await sio.emit("message", json.dumps({
+            stop_message = {
                 "type": "AGENT_GOAL_STOP_RES",
+                "goalId": goal_id,
                 "requestId": requestId,
                 "testCaseId": testCaseId,
                 "success": True
-            }))
-            
+            }
+
+            await send_message(stop_message)
         except Exception as e:
             logger.error(f"Automation failed: {str(e)}", exc_info=True)
             await self._handle_automation_error(sio, goal_id, str(e), requestId, testCaseId)
         finally:
-            await sio.disconnect()
+            logger.info("Disconnecting from automation")
+            try:
+                await sio.disconnect()
+            except Exception as e:
+                logger.error(f"Error during disconnect: {str(e)}")
 
-    async def _handle_automation_error(self, sio, error_msg: str, requestId: str, testCaseId: str):
+    async def _handle_automation_error(self, sio, goal_id: str, error_msg: str, requestId: str, testCaseId: str):
         """Handle and report automation errors"""
         try:
-            await sio.emit("message", json.dumps({
+            error_message = {
                 "type": "AGENT_GOAL_STOP_RES",
+                "goalId": goal_id,
                 "requestId": requestId,
                 "testCaseId": testCaseId,
                 "error": error_msg,
                 "success": False
-            }))
+            }
+            logger.info(f"Sending error message: {error_message}")
+            await sio.emit("message", json.dumps(error_message), namespace="/")
+            logger.info("Error message sent successfully")
         except Exception as e:
-            logger.error(f"Failed to send error message: {str(e)}")
+            logger.error(f"Failed to send error message: {str(e)}", exc_info=True)
 
 def main():
     """Initialize and start the automation server"""

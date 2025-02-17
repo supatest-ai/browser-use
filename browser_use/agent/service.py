@@ -109,6 +109,8 @@ class Agent:
             planner_interval: int = 1,  # Run planner every N steps
             send_message=None,
             goal_step_id: Optional[str] = None,
+            requestId: Optional[str] = None,
+            testCaseId: Optional[str] = None,
     ):
         self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
         self.sensitive_data = sensitive_data
@@ -129,6 +131,8 @@ class Agent:
         self.generate_gif = generate_gif
         self.send_message = send_message
         self.goal_step_id = goal_step_id
+        self.requestId = requestId
+        self.testCaseId = testCaseId
 
         # Initialize planner
         self.planner_llm = planner_llm
@@ -326,10 +330,7 @@ class Agent:
                 # Only true AI policy violations should be sent as separate error messages
                 if ("ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str):
                     if self.send_message:
-                        await self._send_message("error", {
-                            "type": "ai_policy",
-                            "message": "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content."
-                        })
+                        await self._send_message("error", "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content.")
                 # All other errors should be treated as action execution errors
                 self._last_result = [ActionResult(error=error_str, include_in_memory=True)]
                 self.consecutive_failures += 1
@@ -373,10 +374,7 @@ class Agent:
             error_str = str(e)
             if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
                 if self.send_message:
-                    await self._send_message("error", {
-                        "type": "ai_policy",
-                        "message": "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content."
-                    })
+                    await self._send_message("error",  "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content.")
 
         finally:
             actions = [a.model_dump(exclude_unset=True)
@@ -655,6 +653,13 @@ class Agent:
                             continue
 
                     logger.info('✅ Task completed successfully')
+                    if self.send_message:
+                        await self._send_message("AGENT_GOAL_STOP_RES", {
+                            "requestId": self.requestId,
+                            "testCaseId": self.testCaseId,
+                            "success": True,
+                            "error":None,
+                        })
                     if self.register_done_callback:
                         self.register_done_callback(self.history)
                     break
@@ -1404,10 +1409,7 @@ class Agent:
             return
             
         try:
-            # All regular updates use AGENT_SUB_GOAL_UPDATE
-            # Only errors use AGENT_GOAL_STOP_REQ
-            message_type = "AGENT_GOAL_STOP_REQ" if message_type == "error" else "AGENT_SUB_GOAL_UPDATE"
-            
+      
             message = {
                 "type": message_type,
                 "goalId": self.goal_step_id,
