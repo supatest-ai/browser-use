@@ -105,6 +105,8 @@ class Agent:
 		page_extraction_llm: Optional[BaseChatModel] = None,
 		planner_llm: Optional[BaseChatModel] = None,
 		planner_interval: int = 1,  # Run planner every N steps
+		send_message=None,
+		goal_step_id: Optional[str] = None,
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
 		self.sensitive_data = sensitive_data
@@ -125,6 +127,8 @@ class Agent:
 		self.include_attributes = include_attributes
 		self.max_error_length = max_error_length
 		self.generate_gif = generate_gif
+		self.send_message = send_message
+		self.goal_step_id = goal_step_id
 
 		# Initialize planner
 		self.planner_llm = planner_llm
@@ -309,6 +313,17 @@ class Agent:
 			except Exception as e:
 				# model call failed, remove last state message from history
 				self.message_manager._remove_last_state_message()
+				error_str = str(e)
+				# Only true AI policy violations should be sent as separate error messages
+				if ("ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str):
+					if self.send_message:
+						await self._send_message("error", {
+							"type": "ai_policy",
+							"message": "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content."
+						})
+				# All other errors should be treated as action execution errors
+				self._last_result = [ActionResult(error=error_str, include_in_memory=True)]
+				self.consecutive_failures += 1
 				raise e
 
 			result: list[ActionResult] = await self.controller.multi_act(
@@ -337,6 +352,14 @@ class Agent:
 		except Exception as e:
 			result = await self._handle_step_error(e)
 			self._last_result = result
+			# Only send as AI policy error if it's a true content filter violation
+			error_str = str(e)
+			if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
+				if self.send_message:
+					await self._send_message("error", {
+						"type": "ai_policy",
+						"message": "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content."
+					})
 
 		finally:
 			actions = [a.model_dump(exclude_unset=True) for a in model_output.action] if model_output else []
@@ -461,7 +484,7 @@ class Agent:
 
 		return parsed
 
-	def _log_response(self, response: AgentOutput) -> None:
+	async def _log_response(self, response: AgentOutput) -> None:
 		"""Log the model's response"""
 		if 'Success' in response.current_state.evaluation_previous_goal:
 			emoji = '👍'
@@ -469,12 +492,44 @@ class Agent:
 			emoji = '⚠'
 		else:
 			emoji = '🤷'
-		logger.debug(f'🤖 {emoji} Page summary: {response.current_state.page_summary}')
-		logger.info(f'{emoji} Eval: {response.current_state.evaluation_previous_goal}')
+
+		# Log to console
+		logger.debug(
+			f'🤖 {emoji} Page summary: {response.current_state.page_summary}')
+		logger.info(
+			f'{emoji} Eval: {response.current_state.evaluation_previous_goal}')
 		logger.info(f'🧠 Memory: {response.current_state.memory}')
 		logger.info(f'🎯 Next goal: {response.current_state.next_goal}')
+		logger.info(f'🎯 Thought: {response.current_state.thought}')
+
+		# Create steps array with all actions
+		steps = []
 		for i, action in enumerate(response.action):
-			logger.info(f'🛠️  Action {i + 1}/{len(response.action)}: {action.model_dump_json(exclude_unset=True)}')
+			step = json.loads(action.model_dump_json(exclude_unset=True))
+			steps.append(step)
+			logger.info(
+				f'🛠️  Action {i + 1}/{len(response.action)}: {action.model_dump_json(exclude_unset=True)}')
+
+		# Create error info if there are failures
+		error_info = None
+		if self._last_result and any(r.error for r in self._last_result):
+			error_info = {
+				"errorCount": self.consecutive_failures,
+				"errorType": "action_execution",
+				"errorMessage": "; ".join([r.error for r in self._last_result if r.error])
+			}
+
+		# Send single websocket message with all data
+		if self.send_message:
+			await self._send_message("AGENT_SUB_GOAL_UPDATE", {
+				"pageSummary": response.current_state.page_summary,
+				"eval": response.current_state.evaluation_previous_goal,
+				"memory": response.current_state.memory,
+				"nextGoal": response.current_state.next_goal,
+				"thought": response.current_state.thought,
+				"steps": steps,
+				"error": error_info
+			})
 
 	def _save_conversation(self, input_messages: list[BaseMessage], response: Any) -> None:
 		"""Save conversation history to file if path is specified"""
@@ -1304,3 +1359,22 @@ class Agent:
 			logger.info(f'Plan: {plan}')
 
 		return plan
+
+	async def _send_message(self, message_type: str, message_data: Any) -> None:
+		"""Send websocket messages if send_message callback is configured"""
+		if not self.send_message:
+			return
+			
+		try:
+			# All regular updates use AGENT_SUB_GOAL_UPDATE
+			# Only errors use AGENT_GOAL_STOP_REQ
+			message_type = "AGENT_GOAL_STOP_REQ" if message_type == "error" else "AGENT_SUB_GOAL_UPDATE"
+			
+			message = {
+				"type": message_type,
+				"goalId": self.goal_step_id,
+				"message": message_data if isinstance(message_data, dict) else {"message": str(message_data)}
+			}
+			await self.send_message(message)
+		except Exception as e:
+			logger.warning(f"Failed to send message: {str(e)}")

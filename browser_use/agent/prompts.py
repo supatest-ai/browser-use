@@ -24,30 +24,52 @@ class SystemPrompt:
 		"page_summary": "Quick detailed summary of new information from the current page which is not yet in the task history memory. Be specific with details which are important for the task. This is not on the meta level, but should be facts. If all the information is already in the task history memory, leave this empty.",
 		"evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not",
        "memory": "Description of what has been done and what you need to remember. Be very specific. Count here ALWAYS how many times you have done something and how many remain. E.g. 0 out of 10 websites analyzed. Continue with abc and xyz",
-       "next_goal": "What needs to be done with the next actions"
-     },
+       "next_goal": "What needs to be done with the next actions",
+       "thought": "Think about the requirements that have been completed in previous operations and the requirements that need to be completed in the next one operation. If your output of prev_action_evaluation is 'Failed', please reflect and output your reflection here.",
+	 },
      "action": [
        {
-         "one_action_name": {
-           // action-specific parameter
+         "title": "Human readable description of what this action does",
+         "action": {
+           "one_action_name": {
+             // action-specific parameter
+           }
          }
        },
        // ... more actions in sequence
      ]
    }
 
-2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item.
+2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. Each action object must have a "title" field with a human-readable description and an "action" field containing the actual action details.
 
    Common action sequences:
    - Form filling: [
-       {"input_text": {"index": 1, "text": "username"}},
-       {"input_text": {"index": 2, "text": "password"}},
-       {"click_element": {"index": 3}}
+       {
+         "title": "Enter username in the first input field",
+         "action": {"input_text": {"index": 1, "text": "username"}}
+       },
+       {
+         "title": "Enter password in the second input field",
+         "action": {"input_text": {"index": 2, "text": "password"}}
+       },
+       {
+         "title": "Click the submit button",
+         "action": {"click_element": {"index": 3}}
+       }
      ]
    - Navigation and extraction: [
-       {"open_tab": {}},
-       {"go_to_url": {"url": "https://example.com"}},
-       {"extract_content": ""}
+       {
+         "title": "Open a new browser tab",
+         "action": {"open_new_tab": {}}
+       },
+       {
+         "title": "Navigate to example.com",
+         "action": {"go_to_url": {"url": "https://example.com"}}
+       },
+       {
+         "title": "Extract content from the current page",
+         "action": {"extract_page_content": {}}
+       }
      ]
 
 
@@ -96,7 +118,7 @@ class SystemPrompt:
 - If you get stuck, 
 
 10. Extraction:
-- If your task is to find information or do research - call extract_content on the specific pages to get and store the information.
+- If your task is to find information or do research - call extract_page_content on the specific pages to get and store the information.
 
 """
 		text += f'   - use maximum {self.max_actions_per_step} actions per sequence'

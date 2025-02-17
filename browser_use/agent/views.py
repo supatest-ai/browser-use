@@ -41,7 +41,7 @@ class AgentBrain(BaseModel):
 	evaluation_previous_goal: str
 	memory: str
 	next_goal: str
-
+	thought: str
 
 class AgentOutput(BaseModel):
 	"""Output model for agent
@@ -57,14 +57,12 @@ class AgentOutput(BaseModel):
 	@staticmethod
 	def type_with_custom_actions(custom_actions: Type[ActionModel]) -> Type['AgentOutput']:
 		"""Extend actions with custom actions"""
-		model_ = create_model(
+		return create_model(
 			'AgentOutput',
 			__base__=AgentOutput,
 			action=(list[custom_actions], Field(...)),  # Properly annotated field with no default
 			__module__=AgentOutput.__module__,
 		)
-		model_.__doc__ = "AgentOutput model"
-		return model_
 
 
 class AgentHistory(BaseModel):
