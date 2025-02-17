@@ -1,6 +1,6 @@
 from typing import Callable, Dict, Type
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RegisteredAction(BaseModel):
@@ -31,19 +31,18 @@ class RegisteredAction(BaseModel):
 class ActionModel(BaseModel):
 	"""Base model for dynamically created action models"""
 
-	# this will have all the registered actions, e.g.
-	# click_element = param_model = ClickElementParams
-	# done = param_model = None
-	#
+	title: str = Field(description="Human readable description of what this action does")
+	action: dict = Field(description="The actual action to be executed")
+
 	model_config = ConfigDict(arbitrary_types_allowed=True)
 
 	def get_index(self) -> int | None:
 		"""Get the index of the action"""
-		# {'clicked_element': {'index':5}}
-		params = self.model_dump(exclude_unset=True).values()
+		# {'action': {'clicked_element': {'index':5}}}
+		params = self.action
 		if not params:
 			return None
-		for param in params:
+		for param in params.values():
 			if param is not None and 'index' in param:
 				return param['index']
 		return None
@@ -51,13 +50,13 @@ class ActionModel(BaseModel):
 	def set_index(self, index: int):
 		"""Overwrite the index of the action"""
 		# Get the action name and params
-		action_data = self.model_dump(exclude_unset=True)
+		action_data = self.action
 		action_name = next(iter(action_data.keys()))
-		action_params = getattr(self, action_name)
+		action_params = action_data[action_name]
 
-		# Update the index directly on the model
-		if hasattr(action_params, 'index'):
-			action_params.index = index
+		# Update the index directly in the dictionary
+		if 'index' in action_params:
+			action_params['index'] = index
 
 
 class ActionRegistry(BaseModel):

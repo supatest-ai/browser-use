@@ -125,7 +125,7 @@ class Controller:
 			'Input text into a input interactive element',
 			param_model=InputTextAction,
 		)
-		async def input_text(params: InputTextAction, browser: BrowserContext, has_sensitive_data: bool = False):
+		async def input_text(params: InputTextAction, browser: BrowserContext):
 			session = await browser.get_session()
 			state = session.cached_state
 
@@ -134,10 +134,7 @@ class Controller:
 
 			element_node = state.selector_map[params.index]
 			await browser._input_text_element_node(element_node, params.text)
-			if not has_sensitive_data:
-				msg = f'⌨️  Input {params.text} into index {params.index}'
-			else:
-				msg = f'⌨️  Input sensitive data into index {params.index}'
+			msg = f'⌨️  Input {params.text} into index {params.index}'
 			logger.info(msg)
 			logger.debug(f'Element xpath: {element_node.xpath}')
 			return ActionResult(extracted_content=msg, include_in_memory=True)
@@ -504,13 +501,16 @@ class Controller:
 		"""Execute an action"""
 
 		try:
-			for action_name, params in action.model_dump(exclude_unset=True).items():
+			# Extract the actual action from the action field
+			action_data = action.action
+			for action_name, params in action_data.items():
 				if params is not None:
 					with Laminar.start_as_current_span(
 						name=action_name,
 						input={
 							'action': action_name,
 							'params': params,
+							'title': action.title
 						},
 						span_type='TOOL',
 					):

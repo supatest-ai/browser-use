@@ -159,11 +159,14 @@ class Registry:
 	def create_action_model(self) -> Type[ActionModel]:
 		"""Creates a Pydantic model from registered actions"""
 		fields = {
-			name: (
-				Optional[action.param_model],
-				Field(default=None, description=action.description),
+			'title': (str, Field(description="Human readable description of what this action does")),
+			'action': (
+				dict,
+				Field(
+					description="The actual action to be executed",
+					default_factory=dict
+				)
 			)
-			for name, action in self.registry.actions.items()
 		}
 
 		self.telemetry.capture(
