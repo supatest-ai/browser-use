@@ -128,6 +128,26 @@
     return index + 1;
   }
 
+  function generateSupatestId() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      }
+    );
+  }
+
+  function setSupatestId(element) {
+    if (element.getAttribute("supatest_id")) {
+      return;
+    }
+
+    const id = `supatest-id-${generateSupatestId()}`;
+    element.setAttribute("supatest_id", id);
+  }
+
   /**
    * Returns an XPath tree string for an element.
    */
@@ -633,6 +653,7 @@
 
       // Highlight if element meets all criteria and highlighting is enabled
       if (isInteractive && isVisible && isTop) {
+        setSupatestId(node);
         nodeData.highlightIndex = highlightIndex++;
         if (doHighlightElements) {
           if (focusHighlightIndex >= 0) {
@@ -689,7 +710,7 @@
         }
       }
       // If it's an <a> element and has no visible content, return null
-      if (nodeData.tagName === 'a' && nodeData.children.length === 0) {
+      if (nodeData.tagName === "a" && nodeData.children.length === 0) {
         return null;
       }
     }

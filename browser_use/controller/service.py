@@ -270,7 +270,7 @@ class Controller:
 		@self.registry.action(
 			description='Get all options from a native dropdown',
 		)
-		async def get_dropdown_options(index: int, browser: BrowserContext) -> ActionResult:
+		async def get_dropdown_options(index: int, browser: BrowserContext, supatest_id: Optional[str] = None) -> ActionResult:
 			"""Get all options from a native dropdown"""
 			page = await browser.get_current_page()
 			selector_map = await browser.get_selector_map()
@@ -344,6 +344,7 @@ class Controller:
 			index: int,
 			text: str,
 			browser: BrowserContext,
+			supatest_id: Optional[str] = None
 		) -> ActionResult:
 			"""Select dropdown option by the text of the option you want to select"""
 			page = await browser.get_current_page()

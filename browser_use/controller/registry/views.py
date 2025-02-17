@@ -58,6 +58,14 @@ class ActionModel(BaseModel):
 		if 'index' in action_params:
 			action_params['index'] = index
 
+	def set_supatest_id(self, supatest_id: str):
+		action_data = self.action
+		action_name = next(iter(action_data.keys()))
+		action_params = action_data[action_name]
+
+		if 'supatest_id' in action_params:
+			action_params['supatest_id'] = supatest_id
+
 
 class ActionRegistry(BaseModel):
 	"""Model representing the action registry"""

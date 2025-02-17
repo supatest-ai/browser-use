@@ -505,12 +505,24 @@ class Agent:
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
             parsed: AgentOutput | None = response['parsed']
 
-        if parsed is None:
-            raise ValueError('Could not parse response.')
+		if parsed is None:
+			raise ValueError('Could not parse response.')
+		
+		"""Get the current state to access selector_map"""
+		state = await self.browser_context.get_state()
+		
+		"""Add supatest_id to the action if it exists"""
+		for action in parsed.action:
+			index = action.get_index()
+			if index is not None and index in state.selector_map:
+				element = state.selector_map[index]
+				if element.supatest_id:
+					action.set_supatest_id(element.supatest_id)
 
-        # cut the number of actions to max_actions_per_step
-        parsed.action = parsed.action[: self.max_actions_per_step]
-        self.n_steps += 1
+		# cut the number of actions to max_actions_per_step
+		parsed.action = parsed.action[: self.max_actions_per_step]
+		await self._log_response(parsed)
+		self.n_steps += 1
 
         return parsed
 

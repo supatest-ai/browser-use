@@ -983,7 +983,6 @@ class BrowserContext:
 				await self._update_state(focus_element=element_node.highlight_index)
 
 			element_handle = await self.get_locate_element(element_node)
-
 			if element_handle is None:
 				raise Exception(f'Element: {repr(element_node)} not found')
 

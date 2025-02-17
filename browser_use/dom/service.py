@@ -164,6 +164,7 @@ class DomService:
 			viewport_coordinates=viewport_coordinates,
 			page_coordinates=page_coordinates,
 			viewport_info=viewport_info,
+			supatest_id=node_data.get('attributes', {}).get('supatest_id')
 		)
 
 		children_ids = node_data.get('children', [])
