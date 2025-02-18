@@ -510,7 +510,6 @@ class Agent:
                     action.set_supatest_id(element.supatest_id)
 
         parsed.action = parsed.action[: self.max_actions_per_step]
-        await self._log_response(parsed)
         self.n_steps += 1
 
         return parsed
