@@ -1,10 +1,13 @@
+import os
 import logging
 import asyncio
-import websockets
 import json
-import re
 from typing import Dict
+from urllib.parse import parse_qs
+
 import socketio
+from aiohttp import web
+
 from websocket_automation import run_automation
 from browser_use.logging_config import setup_logging
 
@@ -17,57 +20,101 @@ setup_data_store: Dict[str, dict] = {}
 
 class AutomationServer:
     """
-    WebSocket server that handles automation setup and execution.
+    Socket.IO server that handles automation setup and execution.
     Manages initial setup connections and subsequent Socket.IO automation.
     """
-    
-    def __init__(self, host: str = "localhost", port: int = 8765):
-        self.host = host
-        self.port = port
-        
-    async def start(self):
-        """Start the WebSocket server"""
-        server = await websockets.serve(
-            self._handle_setup_connection,
-            self.host,
-            self.port
-        )
-        logger.info(f"Setup server running on ws://{self.host}:{self.port}")
-        await asyncio.Future()  # Run indefinitely
 
-    async def _handle_setup_connection(self, websocket):
+    def __init__(self):
+        # Cloud Run will provide PORT as an environment variable.
+        # Default to 8765 if not found.
+        self.host = "0.0.0.0"
+        self.port = int(os.getenv("PORT", "8765"))
+
+        # Create an AsyncServer instance
+        self.sio = socketio.AsyncServer(
+            async_mode='aiohttp',
+            cors_allowed_origins="*"
+        )
+        # Attach server to an aiohttp web application
+        self.app = web.Application()
+        self.sio.attach(self.app)
+
+        # Register events
+        @self.sio.event
+        async def connect(sid, environ, auth):
+            """When a client connects, store the environ so we can access it later."""
+            logger.info(f"Client connected: {sid}, path={environ.get('PATH_INFO')}")
+            # Store the environ in the built-in dictionary
+            self.sio.environ[sid] = environ
+
+        @self.sio.event
+        async def disconnect(sid):
+            logger.info(f"Client disconnected: {sid}")
+            # Optionally remove from self.sio.environ
+            self.sio.environ.pop(sid, None)
+
+        @self.sio.on("setup_connection")
+        async def handle_setup_connection(sid, data):
+            """
+            Receives the setup data and triggers the automation logic.
+            """
+            # Retrieve the environ from self.sio.environ
+            environ = self.sio.environ.get(sid)
+            await self._handle_setup_connection(sid, data, environ)
+
+    async def start(self):
         """
-        Handle initial setup connection and prepare automation.
-        Extracts setup data and initiates automation process.
+        Start the Socket.IO server
+        """
+        runner = web.AppRunner(self.app)
+        await runner.setup()
+        site = web.TCPSite(runner, host=self.host, port=self.port)
+        await site.start()
+        logger.info(f"Setup server running on http://{self.host}:{self.port}")
+        # Keep the server running forever
+        await asyncio.Event().wait()
+
+    async def _handle_setup_connection(self, sid, data, environ):
+        """
+        Parse the setup data from the Socket.IO event, identify goalId from query,
+        and proceed with storing and automation logic.
         """
         try:
-            # Parse setup message
-            setup_data = await self._parse_setup_message(websocket)
-            
-            # Extract goal step ID from connection path
-            goal_id = await self._extract_goal_id(websocket)
-            
-            # Store setup data for automation
+            # 1) Parse setup message
+            setup_data = self._parse_setup_message(data)
+
+            # 2) Extract goalId from query string
+            if not environ:
+                raise ValueError("No environ data found for this connection.")
+
+            qs = environ.get('QUERY_STRING', '')  # e.g. "goalId=abc123"
+            parsed = parse_qs(qs)
+            goal_id = parsed.get('goalId', [None])[0]
+            if not goal_id:
+                raise ValueError("Missing 'goalId' in query string")
+
+            # 3) Store setup data
             self._store_setup_data(goal_id, setup_data)
 
-            #getting requestId
+            # 4) Get requestId
             requestId = setup_data.get("requestId")
-            
-            # Send success response
-            await self._send_success_response(websocket, requestId)
-            
-            # Start automation process
+
+            # 5) Send success response
+            await self._send_success_response(sid, requestId)
+
+            # 6) Start automation
             await self._run_automation(goal_id, setup_data)
-            
+
         except Exception as e:
             logger.error(f"Setup connection failed: {str(e)}", exc_info=True)
-            await websocket.close(1011, str(e))
+            await self.sio.emit("setup_error", {"error": str(e)}, to=sid)
+            await self.sio.disconnect(sid)
 
-    async def _parse_setup_message(self, websocket) -> dict:
-        """Parse and extract setup data from incoming message"""
-        message = await websocket.recv()
-        data = json.loads(message)
-        
+    def _parse_setup_message(self, data) -> dict:
+        """
+        In Socket.IO, 'data' is usually already parsed JSON.
+        Handle nested 'data' if needed.
+        """
         if isinstance(data, dict) and 'data' in data:
             try:
                 return json.loads(data['data'])
@@ -75,16 +122,10 @@ class AutomationServer:
                 return data['data']
         return data
 
-    async def _extract_goal_id(self, websocket) -> str:
-        """Extract goal step ID from WebSocket connection path"""
-        path = websocket.request.path
-        match = re.match(r'/([^/]+)', path)
-        if not match:
-            raise ValueError("Invalid connection path")
-        return match.group(1)
-
     def _store_setup_data(self, goal_id: str, setup_data: dict):
-        """Store setup data for later use in automation"""
+        """
+        Store setup data for later use
+        """
         setup_data_store[goal_id] = {
             "connectionUrl": setup_data.get("connectionUrl"),
             "task": setup_data.get("task"),
@@ -93,16 +134,24 @@ class AutomationServer:
         }
         logger.debug(f"Stored setup data for {goal_id}")
 
-    async def _send_success_response(self, websocket, requestId: str):
-        """Send success response for setup connection"""
-        await websocket.send(json.dumps({
-            "type": "AGENT_GOAL_START_RES",
-            "requestId": requestId
-        }))
-        await websocket.close()
+    async def _send_success_response(self, sid, requestId: str):
+        """
+        Send success response to the TS client, then optionally disconnect.
+        """
+        await self.sio.emit(
+            "setup_success",
+            {
+                "type": "AGENT_GOAL_START_RES",
+                "requestId": requestId
+            },
+            to=sid
+        )
+        await self.sio.disconnect(sid)
 
     async def _run_automation(self, goal_id: str, setup_data: dict):
-        """Initialize and run the automation process"""
+        """
+        Initialize and run the automation process
+        """
         try:
             automation_uri = self._build_automation_uri(goal_id, setup_data)
             task = setup_data_store[goal_id].get("task")
@@ -123,9 +172,12 @@ class AutomationServer:
                 del setup_data_store[goal_id]
 
     def _build_automation_uri(self, goal_id: str, setup_data: dict) -> str:
-        """Build the Socket.IO automation URI with query parameters"""
+        """
+        Build the Socket.IO automation URI with query params
+        """
+        base_url = os.getenv("AUTOMATION_BASE_URL", "http://localhost:8877")  # Default to localhost if not set
         return (
-            f"http://localhost:8877?type=agent&goalId={goal_id}"
+            f"{base_url}?type=agent&goalId={goal_id}"
             f"&testCaseId={setup_data.get('testCaseId')}"
         )
 
@@ -138,14 +190,17 @@ class AutomationServer:
         requestId: str,
         testCaseId: str
     ):
-        """Execute the automation process using Socket.IO connection"""
+        """
+        Use a separate Socket.IO AsyncClient to connect to the TS server on port 8877
+        for the actual automation.
+        """
         sio = socketio.AsyncClient()
         try:
             await sio.connect(automation_uri, transports=["websocket"])
-            logger.info(f"Socket.IO automation connection established for {goal_id}")
-            
+            logger.info(f"Socket.IO automation connection established for goalId={goal_id}")
+
             async def send_message(msg: dict) -> bool:
-                """Send message through Socket.IO connection"""
+                """Send a JSON-encoded message to the TS server."""
                 if 'type' not in msg:
                     msg['type'] = 'AGENT_SUB_GOAL_UPDATE'
                 try:
@@ -154,9 +209,11 @@ class AutomationServer:
                 except Exception as e:
                     logger.error(f"Failed to send message: {str(e)}")
                     return False
-        
-            # Run automation task and get completion status
-            success = await run_automation(connection_url, task, send_message, goal_id, requestId, testCaseId)
+
+            # Run the actual automation
+            success = await run_automation(
+                connection_url, task, send_message, goal_id, requestId, testCaseId
+            )
             logger.info(f"Automation completed with success: {success}")
 
             stop_message = {
@@ -166,8 +223,8 @@ class AutomationServer:
                 "testCaseId": testCaseId,
                 "success": True
             }
-
             await send_message(stop_message)
+
         except Exception as e:
             logger.error(f"Automation failed: {str(e)}", exc_info=True)
             await self._handle_automation_error(sio, goal_id, str(e), requestId, testCaseId)
@@ -179,7 +236,9 @@ class AutomationServer:
                 logger.error(f"Error during disconnect: {str(e)}")
 
     async def _handle_automation_error(self, sio, goal_id: str, error_msg: str, requestId: str, testCaseId: str):
-        """Handle and report automation errors"""
+        """
+        Send an error message to the TS server if automation fails.
+        """
         try:
             error_message = {
                 "type": "AGENT_GOAL_STOP_RES",
@@ -196,7 +255,7 @@ class AutomationServer:
             logger.error(f"Failed to send error message: {str(e)}", exc_info=True)
 
 def main():
-    """Initialize and start the automation server"""
+    """Initialize and start the automation server using Socket.IO"""
     server = AutomationServer()
     asyncio.run(server.start())
 
