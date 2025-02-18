@@ -45,6 +45,17 @@ class SendKeysAction(BaseModel):
 
 class ExtractPageContentAction(BaseModel):
     value: str
+
+class SelectDropdownOptionAction(BaseModel):
+    index: int
+    text: str
+    xpath: Optional[str] = None
+    supatest_id: Optional[str] = None
+
+class GetDropdownOptionsAction(BaseModel):
+    index: int
+    xpath: Optional[str] = None
+    supatest_id: Optional[str] = None
 	
 class NoParamsAction(BaseModel):
 	"""

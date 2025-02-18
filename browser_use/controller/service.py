@@ -21,6 +21,8 @@ from browser_use.controller.views import (
 	SearchGoogleAction,
 	SendKeysAction,
 	SwitchTabAction,
+	GetDropdownOptionsAction,
+	SelectDropdownOptionAction,
 )
 from browser_use.utils import time_execution_async, time_execution_sync
 
@@ -268,13 +270,14 @@ class Controller:
 				return ActionResult(error=msg, include_in_memory=True)
 
 		@self.registry.action(
-			description='Get all options from a native dropdown',
+			'Get all options from a native dropdown',
+			param_model=GetDropdownOptionsAction,
 		)
-		async def get_dropdown_options(index: int, browser: BrowserContext, supatest_id: Optional[str] = None) -> ActionResult:
+		async def get_dropdown_options(params: GetDropdownOptionsAction, browser: BrowserContext) -> ActionResult:
 			"""Get all options from a native dropdown"""
 			page = await browser.get_current_page()
 			selector_map = await browser.get_selector_map()
-			dom_element = selector_map[index]
+			dom_element = selector_map[params.index]
 
 			try:
 				# Frame-aware approach since we know it works
@@ -338,26 +341,22 @@ class Controller:
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		@self.registry.action(
-			description='Select dropdown option for interactive element index by the text of the option you want to select',
+			'Select dropdown option for interactive element index by the text of the option you want to select',
+			param_model=SelectDropdownOptionAction,
 		)
-		async def select_dropdown_option(
-			index: int,
-			text: str,
-			browser: BrowserContext,
-			supatest_id: Optional[str] = None
-		) -> ActionResult:
+		async def select_dropdown_option(params: SelectDropdownOptionAction, browser: BrowserContext) -> ActionResult:
 			"""Select dropdown option by the text of the option you want to select"""
 			page = await browser.get_current_page()
 			selector_map = await browser.get_selector_map()
-			dom_element = selector_map[index]
+			dom_element = selector_map[params.index]
 
 			# Validate that we're working with a select element
 			if dom_element.tag_name != 'select':
 				logger.error(f'Element is not a select! Tag: {dom_element.tag_name}, Attributes: {dom_element.attributes}')
-				msg = f'Cannot select option: Element with index {index} is a {dom_element.tag_name}, not a select'
+				msg = f'Cannot select option: Element with index {params.index} is a {dom_element.tag_name}, not a select'
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 
-			logger.debug(f"Attempting to select '{text}' using xpath: {dom_element.xpath}")
+			logger.debug(f"Attempting to select '{params.text}' using xpath: {dom_element.xpath}")
 			logger.debug(f'Element attributes: {dom_element.attributes}')
 			logger.debug(f'Element tag: {dom_element.tag_name}')
 
@@ -410,10 +409,10 @@ class Controller:
 							# nth(0) to disable error thrown by strict mode
 							# timeout=1000 because we are already waiting for all network events, therefore ideally we don't need to wait a lot here (default 30s)
 							selected_option_values = (
-								await frame.locator('//' + dom_element.xpath).nth(0).select_option(label=text, timeout=1000)
+								await frame.locator('//' + dom_element.xpath).nth(0).select_option(label=params.text, timeout=1000)
 							)
 
-							msg = f'selected option {text} with value {selected_option_values}'
+							msg = f'selected option {params.text} with value {selected_option_values}'
 							logger.info(msg + f' in frame {frame_index}')
 
 							return ActionResult(extracted_content=msg, include_in_memory=True)
@@ -425,7 +424,7 @@ class Controller:
 
 					frame_index += 1
 
-				msg = f"Could not select option '{text}' in any frame"
+				msg = f"Could not select option '{params.text}' in any frame"
 				logger.info(msg)
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 

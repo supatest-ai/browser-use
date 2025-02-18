@@ -62,9 +62,7 @@ class ActionModel(BaseModel):
 		action_data = self.action
 		action_name = next(iter(action_data.keys()))
 		action_params = action_data[action_name]
-
-		if 'supatest_id' in action_params:
-			action_params['supatest_id'] = supatest_id
+		action_params['supatest_id'] = supatest_id
 
 
 class ActionRegistry(BaseModel):
