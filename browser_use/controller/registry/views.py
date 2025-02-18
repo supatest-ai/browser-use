@@ -58,11 +58,11 @@ class ActionModel(BaseModel):
 		if 'index' in action_params:
 			action_params['index'] = index
 
-	def set_supatest_id(self, supatest_id: str):
+	def set_supatest_locator_id(self, supatest_locator_id: str):
 		action_data = self.action
 		action_name = next(iter(action_data.keys()))
 		action_params = action_data[action_name]
-		action_params['supatest_id'] = supatest_id
+		action_params['supatest_locator_id'] = supatest_locator_id
 
 
 class ActionRegistry(BaseModel):

@@ -128,7 +128,7 @@
     return index + 1;
   }
 
-  function generateSupatestId() {
+  function generateSupatestLocatorId() {
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
       /[xy]/g,
       function (c) {
@@ -139,13 +139,13 @@
     );
   }
 
-  function setSupatestId(element) {
-    if (element.getAttribute("supatest_id")) {
+  function setSupatestLocatorId(element) {
+    if (element.getAttribute("supatest_locator_id")) {
       return;
     }
 
-    const id = `supatest-id-${generateSupatestId()}`;
-    element.setAttribute("supatest_id", id);
+    const id = `${generateSupatestLocatorId()}`;
+    element.setAttribute("supatest_locator_id", id);
   }
 
   /**
@@ -653,7 +653,7 @@
 
       // Highlight if element meets all criteria and highlighting is enabled
       if (isInteractive && isVisible && isTop) {
-        setSupatestId(node);
+        setSupatestLocatorId(node);
         nodeData.highlightIndex = highlightIndex++;
         if (doHighlightElements) {
           if (focusHighlightIndex >= 0) {

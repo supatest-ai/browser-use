@@ -506,8 +506,8 @@ class Agent:
             index = action.get_index()
             if index is not None and index in state.selector_map:
                 element = state.selector_map[index]
-                if element.supatest_id:
-                    action.set_supatest_id(element.supatest_id)
+                if element.supatest_locator_id:
+                    action.set_supatest_locator_id(element.supatest_locator_id)
 
         parsed.action = parsed.action[: self.max_actions_per_step]
         self.n_steps += 1
