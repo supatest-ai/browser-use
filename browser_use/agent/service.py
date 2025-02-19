@@ -12,7 +12,7 @@ import textwrap
 import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Awaitable
 
 from dotenv import load_dotenv
 from google.api_core.exceptions import ResourceExhausted
@@ -107,7 +107,7 @@ class Agent:
             page_extraction_llm: Optional[BaseChatModel] = None,
             planner_llm: Optional[BaseChatModel] = None,
             planner_interval: int = 1,  # Run planner every N steps
-            send_message=None,
+            send_message: Optional[Callable[[dict], Awaitable[bool]]] = None,
             goal_step_id: Optional[str] = None,
             requestId: Optional[str] = None,
             testCaseId: Optional[str] = None,
@@ -366,13 +366,13 @@ class Agent:
                     error='The agent was paused - now continuing actions might need to be repeated', include_in_memory=True
                 )
             ]
-            if self.send_message:
-                await self._send_message("AGENT_GOAL_STOP_RES", {
-                    "requestId": self.requestId,
-                    "testCaseId": self.testCaseId,
-                    "success": False,
-                    "error": "Agent was interrupted"
-                })
+            # if self.send_message:
+            #     await self._send_message("AGENT_GOAL_STOP_RES", {
+            #         "requestId": self.requestId,
+            #         "testCaseId": self.testCaseId,
+            #         "success": False,
+            #         "error": "Agent was interrupted"
+            #     })
             return
         except Exception as e:
             result = await self._handle_step_error(e)
@@ -396,7 +396,7 @@ class Agent:
                         "requestId": self.requestId,
                         "testCaseId": self.testCaseId,
                         "success": False,
-                        "error": error_str[:self.max_error_length] if self.max_error_length else error_str
+                        "error":"something went wrong in agent flow"
                     })
 
         finally:
@@ -661,7 +661,7 @@ class Agent:
                 self._last_result = result
 
             for step in range(max_steps):
-                if self._too_many_failures():
+                if await self._too_many_failures():
                     break
 
                 # Check control flags before each step
@@ -721,7 +721,7 @@ class Agent:
 
                 self.create_history_gif(output_path=output_path)
 
-    def _too_many_failures(self) -> bool:
+    async def _too_many_failures(self) -> bool:
         """Check if we should stop due to too many failures"""
         if self.consecutive_failures >= self.max_failures:
             if self.send_message:
@@ -1064,7 +1064,7 @@ class Agent:
         img_data = base64.b64decode(first_screenshot)
         template = Image.open(io.BytesIO(img_data))
         image = Image.new('RGB', template.size, (0, 0, 0))
-        draw = ImageDraw.Draw(image)
+        draw = Image.Draw(image)
 
         # Calculate vertical center of image
         center_y = image.height // 2
