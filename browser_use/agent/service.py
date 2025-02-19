@@ -366,15 +366,38 @@ class Agent:
                     error='The agent was paused - now continuing actions might need to be repeated', include_in_memory=True
                 )
             ]
+            if self.send_message:
+                await self._send_message("AGENT_GOAL_STOP_RES", {
+                    "requestId": self.requestId,
+                    "testCaseId": self.testCaseId,
+                    "success": False,
+                    "error": "Agent was interrupted"
+                })
             return
         except Exception as e:
             result = await self._handle_step_error(e)
             self._last_result = result
-            # Only send as AI policy error if it's a true content filter violation
             error_str = str(e)
+            
+            # Handle different types of errors
             if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
                 if self.send_message:
-                    await self._send_message("error",  "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content.")
+                    await self._send_message("error", "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines and does not contain prohibited content.")
+                    await self._send_message("AGENT_GOAL_STOP_RES", {
+                        "requestId": self.requestId,
+                        "testCaseId": self.testCaseId,
+                        "success": False,
+                        "error": "AI policy violation"
+                    })
+            else:
+                # Handle other types of errors
+                if self.send_message:
+                    await self._send_message("AGENT_GOAL_STOP_RES", {
+                        "requestId": self.requestId,
+                        "testCaseId": self.testCaseId,
+                        "success": False,
+                        "error": error_str[:self.max_error_length] if self.max_error_length else error_str
+                    })
 
         finally:
             actions = [a.model_dump(exclude_unset=True)
@@ -665,6 +688,13 @@ class Agent:
                     break
             else:
                 logger.info('❌ Failed to complete task in maximum steps')
+                if self.send_message:
+                    await self._send_message("AGENT_GOAL_STOP_RES", {
+                        "requestId": self.requestId,
+                        "testCaseId": self.testCaseId,
+                        "success": False,
+                        "error": "Failed to complete task in maximum steps"
+                    })
 
             return self.history
         finally:
@@ -694,6 +724,13 @@ class Agent:
     def _too_many_failures(self) -> bool:
         """Check if we should stop due to too many failures"""
         if self.consecutive_failures >= self.max_failures:
+            if self.send_message:
+                await self._send_message("AGENT_GOAL_STOP_RES", {
+                    "requestId": self.requestId,
+                    "testCaseId": self.testCaseId,
+                    "success": False,
+                    "error": "Failed to complete task in maximum steps"
+                })
             logger.error(
                 f'❌ Stopping due to {self.max_failures} consecutive failures')
             return True
