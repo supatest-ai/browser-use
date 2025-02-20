@@ -39,19 +39,21 @@ class AutomationServer:
         self.app = web.Application()
         self.sio.attach(self.app)
 
-        # Register events
-        @self.sio.event
-        async def connect(sid, environ, auth):
-            """When a client connects, store the environ so we can access it later."""
-            logger.info(f"Client connected: {sid}, path={environ.get('PATH_INFO')}")
-            # Store the environ in the built-in dictionary
-            self.sio.environ[sid] = environ
+        # Add environ storage
+        self.environ_store = {}
 
-        @self.sio.event
+        # Register events
+        @self.sio.on('connect', namespace='/')
+        async def connect(sid, environ, auth):
+            logger.info(f"Client connected: {sid}")
+            self.environ_store[sid] = environ
+        
+        @self.sio.on('disconnect', namespace='/')
         async def disconnect(sid):
             logger.info(f"Client disconnected: {sid}")
-            # Optionally remove from self.sio.environ
-            self.sio.environ.pop(sid, None)
+            # Clean up environ data
+            if sid in self.environ_store:
+                del self.environ_store[sid]
 
         @self.sio.on("setup_connection")
         async def handle_setup_connection(sid, data):
@@ -84,10 +86,11 @@ class AutomationServer:
             setup_data = self._parse_setup_message(data)
 
             # 2) Extract goalId from query string
-            if not environ:
-                raise ValueError("No environ data found for this connection.")
+            environ_data = self.environ_store.get(sid) or environ
+            if not environ_data:
+                raise ValueError("No environ data found for this connection. Please ensure proper connection setup.")
 
-            qs = environ.get('QUERY_STRING', '')  # e.g. "goalId=abc123"
+            qs = environ_data.get('QUERY_STRING', '')
             parsed = parse_qs(qs)
             goal_id = parsed.get('goalId', [None])[0]
             if not goal_id:
@@ -196,15 +199,13 @@ class AutomationServer:
         """
         sio = socketio.AsyncClient()
         try:
-            await sio.connect(automation_uri, transports=["websocket"])
-            logger.info(f"Socket.IO automation connection established for goalId={goal_id}")
-
+            # Connect with explicit namespace
+            await sio.connect(automation_uri, transports=["websocket"], namespaces=['/'])
+            
             async def send_message(msg: dict) -> bool:
-                """Send a JSON-encoded message to the TS server."""
-                if 'type' not in msg:
-                    msg['type'] = 'AGENT_SUB_GOAL_UPDATE'
                 try:
-                    await sio.emit("message", json.dumps(msg), callback=True)
+                    # Specify namespace when emitting
+                    await sio.emit("message", json.dumps(msg), namespace='/', callback=True)
                     return True
                 except Exception as e:
                     logger.error(f"Failed to send message: {str(e)}")
@@ -216,14 +217,6 @@ class AutomationServer:
             )
             logger.info(f"Automation completed with success: {success}")
 
-            stop_message = {
-                "type": "AGENT_GOAL_STOP_RES",
-                "goalId": goal_id,
-                "requestId": requestId,
-                "testCaseId": testCaseId,
-                "success": True
-            }
-            await send_message(stop_message)
 
         except Exception as e:
             logger.error(f"Automation failed: {str(e)}", exc_info=True)
@@ -249,7 +242,7 @@ class AutomationServer:
                 "success": False
             }
             logger.info(f"Sending error message: {error_message}")
-            await sio.emit("message", json.dumps(error_message), namespace="/")
+            await sio.emit("message", json.dumps(msg), namespace='/', callback=True)
             logger.info("Error message sent successfully")
         except Exception as e:
             logger.error(f"Failed to send error message: {str(e)}", exc_info=True)
