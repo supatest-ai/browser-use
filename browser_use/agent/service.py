@@ -1064,7 +1064,7 @@ class Agent:
         img_data = base64.b64decode(first_screenshot)
         template = Image.open(io.BytesIO(img_data))
         image = Image.new('RGB', template.size, (0, 0, 0))
-        draw = Image.Draw(image)
+        draw = ImageDraw.Draw(image)
 
         # Calculate vertical center of image
         center_y = image.height // 2
