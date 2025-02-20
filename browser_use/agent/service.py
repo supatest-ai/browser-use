@@ -311,7 +311,7 @@ class Agent:
 
             try:
                 model_output = await self.get_next_action(input_messages)
-
+                await self._log_response(model_output)
                 if self.register_new_step_callback:
                     self.register_new_step_callback(
                         state, model_output, self.n_steps)
@@ -417,7 +417,7 @@ class Agent:
 
             if state and model_output:
                 self._make_history_item(model_output, state, result)
-                await self._log_response(model_output)
+               
 
     async def _handle_step_error(self, error: Exception) -> list[ActionResult]:
         """Handle all types of errors that can occur during a step"""
