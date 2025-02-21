@@ -101,6 +101,8 @@ class AutomationServer:
 
             # 4) Get requestId
             requestId = setup_data.get("requestId")
+            if requestId is None:
+                raise ValueError("requestId cannot be None")
 
             # 5) Send success response
             await self._send_success_response(sid, requestId)
@@ -159,8 +161,24 @@ class AutomationServer:
             automation_uri = self._build_automation_uri(goal_id, setup_data)
             task = setup_data_store[goal_id].get("task")
             connection_url = setup_data_store[goal_id].get("connectionUrl")
-            requestId = setup_data_store[goal_id].get("requestId")
+            
+            # Ensure connection_url is not None
+            if connection_url is None:
+                raise ValueError("connection_url cannot be None")
+            
+            # Ensure task is not None
+            if task is None:
+                raise ValueError("task cannot be None")
+
+            requestId = setup_data_store[goal_id].get("requestId")  
+            # Ensure requestId is not None
+            if requestId is None:
+                raise ValueError("requestId cannot be None")
+
             testCaseId = setup_data_store[goal_id].get("testCaseId")
+            # Ensure testCaseId is not None
+            if testCaseId is None:
+                raise ValueError("testCaseId cannot be None")
 
             await self._execute_automation(
                 automation_uri,
@@ -242,7 +260,7 @@ class AutomationServer:
                 "success": False
             }
             logger.info(f"Sending error message: {error_message}")
-            await sio.emit("message", json.dumps(msg), namespace='/', callback=True)
+            await sio.emit("message", json.dumps(error_message), namespace='/', callback=True)
             logger.info("Error message sent successfully")
         except Exception as e:
             logger.error(f"Failed to send error message: {str(e)}", exc_info=True)
