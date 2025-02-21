@@ -1,14 +1,14 @@
-import os
-import logging
 import asyncio
 import json
+import logging
+import os
 from typing import Dict, Optional
 from urllib.parse import parse_qs
 
 import socketio
 from aiohttp import web
-
 from websocket_automation import run_automation
+
 from browser_use.logging_config import setup_logging
 
 # Initialize logging
@@ -41,6 +41,9 @@ class AutomationServer:
 
         # Add environ storage
         self.environ_store = {}
+
+        # Add health check route
+        self.app.router.add_get('/health', self.health_check)
 
         # Register events
         @self.sio.on('connect', namespace='/')
@@ -268,6 +271,9 @@ class AutomationServer:
             logger.info("Error message sent successfully")
         except Exception as e:
             logger.error(f"Failed to send error message: {str(e)}", exc_info=True)
+
+    async def health_check(self, request):
+        return web.Response(text='OK', status=200)
 
 def main():
     """Initialize and start the automation server using Socket.IO"""
