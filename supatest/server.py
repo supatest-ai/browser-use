@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import json
-from typing import Dict
+from typing import Dict, Optional
 from urllib.parse import parse_qs
 
 import socketio
@@ -135,7 +135,8 @@ class AutomationServer:
             "connectionUrl": setup_data.get("connectionUrl"),
             "task": setup_data.get("task"),
             "testCaseId": setup_data.get("testCaseId"),
-            "requestId": setup_data.get("requestId")
+            "requestId": setup_data.get("requestId"),
+            "sensitiveData": setup_data.get("sensitiveData"),
         }
         logger.debug(f"Stored setup data for {goal_id}")
 
@@ -179,6 +180,7 @@ class AutomationServer:
             # Ensure testCaseId is not None
             if testCaseId is None:
                 raise ValueError("testCaseId cannot be None")
+            sensitiveData = setup_data_store[goal_id].get("sensitiveData")
 
             await self._execute_automation(
                 automation_uri,
@@ -186,7 +188,8 @@ class AutomationServer:
                 task,
                 goal_id,
                 requestId,
-                testCaseId
+                testCaseId,
+                sensitiveData
             )
         finally:
             if goal_id in setup_data_store:
@@ -209,7 +212,8 @@ class AutomationServer:
         task: str,
         goal_id: str,
         requestId: str,
-        testCaseId: str
+        testCaseId: str,
+        sensitiveData: Optional[dict] = None
     ):
         """
         Use a separate Socket.IO AsyncClient to connect to the TS server on port 8877
@@ -231,7 +235,7 @@ class AutomationServer:
 
             # Run the actual automation
             success = await run_automation(
-                connection_url, task, send_message, goal_id, requestId, testCaseId
+                connection_url, task, send_message, goal_id, requestId, testCaseId, sensitiveData
             )
             logger.info(f"Automation completed with success: {success}")
 

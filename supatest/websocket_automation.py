@@ -16,7 +16,7 @@ from browser_use import ActionResult, Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
 from browser_use.browser.context import BrowserContext
 
-async def run_automation(connection_url, task, send_message, goal_step_id, requestId, testCaseId):
+async def run_automation(connection_url, task, send_message, goal_step_id, requestId, testCaseId, sensitiveData):
         # Initialize browser with received connection URL
         browser = Browser(
             config=BrowserConfig(
@@ -37,6 +37,8 @@ async def run_automation(connection_url, task, send_message, goal_step_id, reque
             },
             temperature=0.7,
         )
+
+        print(f"Sensitive data: {sensitiveData}")
         
         agent = Agent(
             task=task,
@@ -45,7 +47,8 @@ async def run_automation(connection_url, task, send_message, goal_step_id, reque
             send_message=send_message,
             goal_step_id=goal_step_id,
             requestId=requestId,
-            testCaseId=testCaseId
+            testCaseId=testCaseId,
+            sensitive_data=sensitiveData
         )
         
         # Run the automation task
