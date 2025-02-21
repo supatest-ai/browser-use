@@ -366,13 +366,6 @@ class Agent:
                     error='The agent was paused - now continuing actions might need to be repeated', include_in_memory=True
                 )
             ]
-            # if self.send_message:
-            #     await self._send_message("AGENT_GOAL_STOP_RES", {
-            #         "requestId": self.requestId,
-            #         "testCaseId": self.testCaseId,
-            #         "success": False,
-            #         "error": "Agent was interrupted"
-            #     })
             return
         except Exception as e:
             result = await self._handle_step_error(e)
@@ -388,15 +381,6 @@ class Agent:
                         "testCaseId": self.testCaseId,
                         "success": False,
                         "error": "AI policy violation"
-                    })
-            else:
-                # Handle other types of errors
-                if self.send_message:
-                    await self._send_message("AGENT_GOAL_STOP_RES", {
-                        "requestId": self.requestId,
-                        "testCaseId": self.testCaseId,
-                        "success": False,
-                        "error":"something went wrong in agent flow"
                     })
 
         finally:
