@@ -4,10 +4,6 @@ from pydantic import BaseModel, model_validator
 
 
 # Action Input Models
-class SearchGoogleAction(BaseModel):
-	query: str
-
-
 class GoToUrlAction(BaseModel):
 	url: str
 

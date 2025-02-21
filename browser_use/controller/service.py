@@ -18,7 +18,6 @@ from browser_use.controller.views import (
 	NoParamsAction,
 	OpenTabAction,
 	ScrollAction,
-	SearchGoogleAction,
 	SendKeysAction,
 	SwitchTabAction,
 	GetDropdownOptionsAction,
@@ -56,18 +55,6 @@ class Controller:
 				return ActionResult(is_done=True, extracted_content=params.text)
 
 		# Basic Navigation Actions
-		@self.registry.action(
-			'Search the query in Google in the current tab, the query should be a search query like humans search in Google, concrete and not vague or super long. More the single most important items. ',
-			param_model=SearchGoogleAction,
-		)
-		async def search_google(params: SearchGoogleAction, browser: BrowserContext):
-			page = await browser.get_current_page()
-			await page.goto(f'https://www.google.com/search?q={params.query}&udm=14')
-			await page.wait_for_load_state()
-			msg = f'🔍  Searched for "{params.query}" in Google'
-			logger.info(msg)
-			return ActionResult(extracted_content=msg, include_in_memory=True)
-
 		@self.registry.action('Navigate to URL in the current tab', param_model=GoToUrlAction)
 		async def go_to_url(params: GoToUrlAction, browser: BrowserContext):
 			page = await browser.get_current_page()
