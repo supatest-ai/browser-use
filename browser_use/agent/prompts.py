@@ -60,7 +60,7 @@ class SystemPrompt:
    - Navigation and extraction: [
        {
          "title": "Open a new browser tab",
-         "action": {"open_new_tab": {}}
+         "action": {"open_tab": {"url": ""}}
        },
        {
          "title": "Navigate to example.com",
