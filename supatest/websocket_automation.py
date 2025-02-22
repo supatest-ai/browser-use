@@ -1,8 +1,8 @@
+import json
 import os
 import sys
-from typing import List, Optional
 import time
-import json
+from typing import List, Optional
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from browser_use import ActionResult, Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
 from browser_use.browser.context import BrowserContext
+
 
 async def run_automation(connection_url, task, send_message, goal_step_id, requestId, testCaseId, sensitiveData):
         # Initialize browser with received connection URL
@@ -37,8 +38,6 @@ async def run_automation(connection_url, task, send_message, goal_step_id, reque
             },
             temperature=0.7,
         )
-
-        print(f"Sensitive data: {sensitiveData}")
         
         agent = Agent(
             task=task,
