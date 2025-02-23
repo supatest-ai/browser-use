@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import signal
 from typing import Dict, Optional
 from urllib.parse import parse_qs
 
@@ -37,9 +38,13 @@ class Server:
         
         self.sio = self.handler.sio
         self._setup_setup_connection_handler()
+        
+        self.runner = None
+        self.site = None
+        self.shutdown_event = asyncio.Event()
 
     def _setup_setup_connection_handler(self):
-        @self.sio.on("setup_connection")
+        @self.sio.on("setup_connection", namespace='/')
         async def handle_setup_connection(sid, data):
             environ = await self.session_manager.get_connection_environment(sid)
             await self._handle_setup_connection(sid, data, environ)
@@ -48,13 +53,38 @@ class Server:
         """
         Start the Socket.IO server
         """
-        runner = web.AppRunner(self.app)
-        await runner.setup()
-        site = web.TCPSite(runner, host=self.host, port=self.port)
-        await site.start()
+        self.runner = web.AppRunner(self.app)
+        await self.runner.setup()
+        self.site = web.TCPSite(self.runner, host=self.host, port=self.port)
+        await self.site.start()
         logger.info(f"Setup server running on http://{self.host}:{self.port}")
-        # Keep the server running forever
-        await asyncio.Event().wait()
+
+        # Setup signal handlers
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            asyncio.get_running_loop().add_signal_handler(
+                sig,
+                lambda s=sig: asyncio.create_task(self.shutdown(sig=s))
+            )
+
+        # Wait for shutdown signal
+        await self.shutdown_event.wait()
+        
+        # Cleanup
+        await self._cleanup()
+        logger.info("Server shutdown complete")
+
+    async def _cleanup(self):
+        """Cleanup server resources"""
+        if self.site:
+            await self.site.stop()
+        if self.runner:
+            await self.runner.cleanup()
+
+    async def shutdown(self, sig=None):
+        """Initiate graceful shutdown"""
+        if sig:
+            logger.info(f"Received shutdown signal {sig.name}")
+        self.shutdown_event.set()
 
     async def _handle_setup_connection(self, sid, data, environ):
         """
@@ -110,6 +140,8 @@ class Server:
         return goal_id
 
     async def health_check(self, request):
+        if self.shutdown_event.is_set():
+            return web.Response(text='SHUTTING_DOWN', status=503)
         return web.Response(text='OK', status=200)
 
 def main():
