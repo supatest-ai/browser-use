@@ -51,6 +51,4 @@ async def run_automation(connection_url, task, send_message, goal_step_id, reque
         )
         
         # Run the automation task
-        await agent.run()
-        
-
+        await agent.run() 

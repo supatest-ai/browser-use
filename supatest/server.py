@@ -7,16 +7,14 @@ from urllib.parse import parse_qs
 
 import socketio
 from aiohttp import web
-from websocket_automation import run_automation
+from automation_executor import run_automation
+from automation_session import AutomationSessionManager
 
 from browser_use.logging_config import setup_logging
 
 # Initialize logging
 setup_logging()
 logger = logging.getLogger("py_ws_server")
-
-# Store setup data temporarily, keyed by goalId
-setup_data_store: Dict[str, dict] = {}
 
 class AutomationServer:
     """
@@ -29,6 +27,7 @@ class AutomationServer:
         # Default to 8765 if not found.
         self.host = "0.0.0.0"
         self.port = int(os.getenv("PORT", "8765"))
+        self.session_manager = AutomationSessionManager()
 
         # Create an AsyncServer instance
         self.sio = socketio.AsyncServer(
@@ -39,9 +38,6 @@ class AutomationServer:
         self.app = web.Application()
         self.sio.attach(self.app)
 
-        # Add environ storage
-        self.environ_store = {}
-
         # Add health check route
         self.app.router.add_get('/health', self.health_check)
 
@@ -49,22 +45,19 @@ class AutomationServer:
         @self.sio.on('connect', namespace='/')
         async def connect(sid, environ, auth):
             logger.info(f"Client connected: {sid}")
-            self.environ_store[sid] = environ
+            await self.session_manager.store_connection_environment(sid, environ)
         
         @self.sio.on('disconnect', namespace='/')
         async def disconnect(sid):
             logger.info(f"Client disconnected: {sid}")
-            # Clean up environ data
-            if sid in self.environ_store:
-                del self.environ_store[sid]
+            await self.session_manager.remove_connection_environment(sid)
 
         @self.sio.on("setup_connection")
         async def handle_setup_connection(sid, data):
             """
             Receives the setup data and triggers the automation logic.
             """
-            # Retrieve the environ from self.sio.environ
-            environ = self.sio.environ.get(sid)
+            environ = await self.session_manager.get_connection_environment(sid)
             await self._handle_setup_connection(sid, data, environ)
 
     async def start(self):
@@ -89,18 +82,17 @@ class AutomationServer:
             setup_data = self._parse_setup_message(data)
 
             # 2) Extract goalId from query string
-            environ_data = self.environ_store.get(sid) or environ
-            if not environ_data:
-                raise ValueError("No environ data found for this connection. Please ensure proper connection setup.")
+            if not environ:
+                raise ValueError("No environ data found for this connection")
 
-            qs = environ_data.get('QUERY_STRING', '')
+            qs = environ.get('QUERY_STRING', '')
             parsed = parse_qs(qs)
             goal_id = parsed.get('goalId', [None])[0]
             if not goal_id:
                 raise ValueError("Missing 'goalId' in query string")
 
             # 3) Store setup data
-            self._store_setup_data(goal_id, setup_data)
+            await self.session_manager.store_automation_setup(goal_id, setup_data)
 
             # 4) Get requestId
             requestId = setup_data.get("requestId")
@@ -111,7 +103,7 @@ class AutomationServer:
             await self._send_success_response(sid, requestId)
 
             # 6) Start automation
-            await self._run_automation(goal_id, setup_data)
+            await self._run_automation(goal_id)
 
         except Exception as e:
             logger.error(f"Setup connection failed: {str(e)}", exc_info=True)
@@ -130,19 +122,6 @@ class AutomationServer:
                 return data['data']
         return data
 
-    def _store_setup_data(self, goal_id: str, setup_data: dict):
-        """
-        Store setup data for later use
-        """
-        setup_data_store[goal_id] = {
-            "connectionUrl": setup_data.get("connectionUrl"),
-            "task": setup_data.get("task"),
-            "testCaseId": setup_data.get("testCaseId"),
-            "requestId": setup_data.get("requestId"),
-            "sensitiveData": setup_data.get("sensitiveData"),
-        }
-        logger.debug(f"Stored setup data for {goal_id}")
-
     async def _send_success_response(self, sid, requestId: str):
         """
         Send success response to the TS client, then optionally disconnect.
@@ -157,55 +136,40 @@ class AutomationServer:
         )
         await self.sio.disconnect(sid)
 
-    async def _run_automation(self, goal_id: str, setup_data: dict):
+    async def _run_automation(self, goal_id: str):
         """
         Initialize and run the automation process
         """
-        try:
-            automation_uri = self._build_automation_uri(goal_id, setup_data)
-            task = setup_data_store[goal_id].get("task")
-            connection_url = setup_data_store[goal_id].get("connectionUrl")
-            
-            # Ensure connection_url is not None
-            if connection_url is None:
-                raise ValueError("connection_url cannot be None")
-            
-            # Ensure task is not None
-            if task is None:
-                raise ValueError("task cannot be None")
+        async with self.session_manager.goal_session(goal_id) as setup_data:
+            try:
+                if not setup_data:
+                    raise ValueError("Setup data not found")
 
-            requestId = setup_data_store[goal_id].get("requestId")  
-            # Ensure requestId is not None
-            if requestId is None:
-                raise ValueError("requestId cannot be None")
+                automation_uri = self._build_automation_uri(goal_id, setup_data)
+                
+                await self._execute_automation(
+                    automation_uri,
+                    setup_data.connection_url,
+                    setup_data.task,
+                    goal_id,
+                    setup_data.request_id,
+                    setup_data.test_case_id,
+                    setup_data.sensitive_data
+                )
+            except Exception as e:
+                logger.error(f"Automation failed: {str(e)}", exc_info=True)
+                await self._handle_automation_error(
+                    None, goal_id, str(e), setup_data.request_id, setup_data.test_case_id
+                )
 
-            testCaseId = setup_data_store[goal_id].get("testCaseId")
-            # Ensure testCaseId is not None
-            if testCaseId is None:
-                raise ValueError("testCaseId cannot be None")
-            sensitiveData = setup_data_store[goal_id].get("sensitiveData")
-
-            await self._execute_automation(
-                automation_uri,
-                connection_url,
-                task,
-                goal_id,
-                requestId,
-                testCaseId,
-                sensitiveData
-            )
-        finally:
-            if goal_id in setup_data_store:
-                del setup_data_store[goal_id]
-
-    def _build_automation_uri(self, goal_id: str, setup_data: dict) -> str:
+    def _build_automation_uri(self, goal_id: str, setup_data) -> str:
         """
         Build the Socket.IO automation URI with query params
         """
         base_url = os.getenv("AUTOMATION_BASE_URL", "http://localhost:8877")  # Default to localhost if not set
         return (
             f"{base_url}?type=agent&goalId={goal_id}"
-            f"&testCaseId={setup_data.get('testCaseId')}"
+            f"&testCaseId={setup_data.test_case_id}"
         )
 
     async def _execute_automation(
@@ -242,7 +206,6 @@ class AutomationServer:
             )
             logger.info(f"Automation completed with success: {success}")
 
-
         except Exception as e:
             logger.error(f"Automation failed: {str(e)}", exc_info=True)
             await self._handle_automation_error(sio, goal_id, str(e), requestId, testCaseId)
@@ -258,17 +221,17 @@ class AutomationServer:
         Send an error message to the TS server if automation fails.
         """
         try:
-            error_message = {
-                "type": "AGENT_GOAL_STOP_RES",
-                "goalId": goal_id,
-                "requestId": requestId,
-                "testCaseId": testCaseId,
-                "error": error_msg,
-                "success": False
-            }
-            logger.info(f"Sending error message: {error_message}")
-            await sio.emit("message", json.dumps(error_message), namespace='/', callback=True)
-            logger.info("Error message sent successfully")
+            if sio:
+                error_message = {
+                    "type": "AGENT_GOAL_STOP_RES",
+                    "goalId": goal_id,
+                    "requestId": requestId,
+                    "testCaseId": testCaseId,
+                    "error": error_msg,
+                    "success": False
+                }
+                await sio.emit("message", json.dumps(error_message), namespace='/', callback=True)
+                logger.info("Error message sent successfully")
         except Exception as e:
             logger.error(f"Failed to send error message: {str(e)}", exc_info=True)
 
