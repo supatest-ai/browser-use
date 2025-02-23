@@ -12,7 +12,7 @@ class AutomationSetup:
     request_id: str
     sensitive_data: Optional[dict]
     
-class AutomationSessionManager:
+class SessionManager:
     def __init__(self):
         self._automation_setups: Dict[str, AutomationSetup] = {}
         self.connection_environments: Dict[str, dict] = {}
