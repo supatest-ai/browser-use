@@ -122,8 +122,8 @@ class Registry:
 				extra_args['page_extraction_llm'] = page_extraction_llm
 			if 'available_file_paths' in parameter_names:
 				extra_args['available_file_paths'] = available_file_paths
-			if action_name == 'input_text' and sensitive_data:
-				extra_args['has_sensitive_data'] = True
+			# if action_name == 'input_text' and sensitive_data:
+			# 	extra_args['has_sensitive_data'] = True
 			if is_pydantic:
 				return await action.function(validated_params, **extra_args)
 			return await action.function(**validated_params.model_dump(), **extra_args)
@@ -159,11 +159,14 @@ class Registry:
 	def create_action_model(self) -> Type[ActionModel]:
 		"""Creates a Pydantic model from registered actions"""
 		fields = {
-			name: (
-				Optional[action.param_model],
-				Field(default=None, description=action.description),
+			'title': (str, Field(description="Human readable description of what this action does")),
+			'action': (
+				dict,
+				Field(
+					description="The actual action to be executed",
+					default_factory=dict
+				)
 			)
-			for name, action in self.registry.actions.items()
 		}
 
 		self.telemetry.capture(

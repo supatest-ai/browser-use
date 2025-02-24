@@ -18,9 +18,10 @@ from browser_use.controller.views import (
 	NoParamsAction,
 	OpenTabAction,
 	ScrollAction,
-	SearchGoogleAction,
 	SendKeysAction,
 	SwitchTabAction,
+	GetDropdownOptionsAction,
+	SelectDropdownOptionAction,
 )
 from browser_use.utils import time_execution_async, time_execution_sync
 
@@ -54,18 +55,6 @@ class Controller:
 				return ActionResult(is_done=True, extracted_content=params.text)
 
 		# Basic Navigation Actions
-		@self.registry.action(
-			'Search the query in Google in the current tab, the query should be a search query like humans search in Google, concrete and not vague or super long. More the single most important items. ',
-			param_model=SearchGoogleAction,
-		)
-		async def search_google(params: SearchGoogleAction, browser: BrowserContext):
-			page = await browser.get_current_page()
-			await page.goto(f'https://www.google.com/search?q={params.query}&udm=14')
-			await page.wait_for_load_state()
-			msg = f'🔍  Searched for "{params.query}" in Google'
-			logger.info(msg)
-			return ActionResult(extracted_content=msg, include_in_memory=True)
-
 		@self.registry.action('Navigate to URL in the current tab', param_model=GoToUrlAction)
 		async def go_to_url(params: GoToUrlAction, browser: BrowserContext):
 			page = await browser.get_current_page()
@@ -125,7 +114,7 @@ class Controller:
 			'Input text into a input interactive element',
 			param_model=InputTextAction,
 		)
-		async def input_text(params: InputTextAction, browser: BrowserContext, has_sensitive_data: bool = False):
+		async def input_text(params: InputTextAction, browser: BrowserContext):
 			session = await browser.get_session()
 			state = session.cached_state
 
@@ -134,10 +123,7 @@ class Controller:
 
 			element_node = state.selector_map[params.index]
 			await browser._input_text_element_node(element_node, params.text)
-			if not has_sensitive_data:
-				msg = f'⌨️  Input {params.text} into index {params.index}'
-			else:
-				msg = f'⌨️  Input sensitive data into index {params.index}'
+			msg = f'⌨️  Input {params.text} into index {params.index}'
 			logger.info(msg)
 			logger.debug(f'Element xpath: {element_node.xpath}')
 			return ActionResult(extracted_content=msg, include_in_memory=True)
@@ -271,13 +257,14 @@ class Controller:
 				return ActionResult(error=msg, include_in_memory=True)
 
 		@self.registry.action(
-			description='Get all options from a native dropdown',
+			'Get all options from a native dropdown',
+			param_model=GetDropdownOptionsAction,
 		)
-		async def get_dropdown_options(index: int, browser: BrowserContext) -> ActionResult:
+		async def get_dropdown_options(params: GetDropdownOptionsAction, browser: BrowserContext) -> ActionResult:
 			"""Get all options from a native dropdown"""
 			page = await browser.get_current_page()
 			selector_map = await browser.get_selector_map()
-			dom_element = selector_map[index]
+			dom_element = selector_map[params.index]
 
 			try:
 				# Frame-aware approach since we know it works
@@ -341,25 +328,22 @@ class Controller:
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		@self.registry.action(
-			description='Select dropdown option for interactive element index by the text of the option you want to select',
+			'Select dropdown option for interactive element index by the text of the option you want to select',
+			param_model=SelectDropdownOptionAction,
 		)
-		async def select_dropdown_option(
-			index: int,
-			text: str,
-			browser: BrowserContext,
-		) -> ActionResult:
+		async def select_dropdown_option(params: SelectDropdownOptionAction, browser: BrowserContext) -> ActionResult:
 			"""Select dropdown option by the text of the option you want to select"""
 			page = await browser.get_current_page()
 			selector_map = await browser.get_selector_map()
-			dom_element = selector_map[index]
+			dom_element = selector_map[params.index]
 
 			# Validate that we're working with a select element
 			if dom_element.tag_name != 'select':
 				logger.error(f'Element is not a select! Tag: {dom_element.tag_name}, Attributes: {dom_element.attributes}')
-				msg = f'Cannot select option: Element with index {index} is a {dom_element.tag_name}, not a select'
+				msg = f'Cannot select option: Element with index {params.index} is a {dom_element.tag_name}, not a select'
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 
-			logger.debug(f"Attempting to select '{text}' using xpath: {dom_element.xpath}")
+			logger.debug(f"Attempting to select '{params.text}' using xpath: {dom_element.xpath}")
 			logger.debug(f'Element attributes: {dom_element.attributes}')
 			logger.debug(f'Element tag: {dom_element.tag_name}')
 
@@ -412,10 +396,10 @@ class Controller:
 							# nth(0) to disable error thrown by strict mode
 							# timeout=1000 because we are already waiting for all network events, therefore ideally we don't need to wait a lot here (default 30s)
 							selected_option_values = (
-								await frame.locator('//' + dom_element.xpath).nth(0).select_option(label=text, timeout=1000)
+								await frame.locator('//' + dom_element.xpath).nth(0).select_option(label=params.text, timeout=1000)
 							)
 
-							msg = f'selected option {text} with value {selected_option_values}'
+							msg = f'selected option {params.text} with value {selected_option_values}'
 							logger.info(msg + f' in frame {frame_index}')
 
 							return ActionResult(extracted_content=msg, include_in_memory=True)
@@ -427,7 +411,7 @@ class Controller:
 
 					frame_index += 1
 
-				msg = f"Could not select option '{text}' in any frame"
+				msg = f"Could not select option '{params.text}' in any frame"
 				logger.info(msg)
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 
@@ -504,13 +488,16 @@ class Controller:
 		"""Execute an action"""
 
 		try:
-			for action_name, params in action.model_dump(exclude_unset=True).items():
+			# Extract the actual action from the action field
+			action_data = action.action
+			for action_name, params in action_data.items():
 				if params is not None:
 					with Laminar.start_as_current_span(
 						name=action_name,
 						input={
 							'action': action_name,
 							'params': params,
+							'title': action.title
 						},
 						span_type='TOOL',
 					):

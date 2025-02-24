@@ -4,10 +4,6 @@ from pydantic import BaseModel, model_validator
 
 
 # Action Input Models
-class SearchGoogleAction(BaseModel):
-	query: str
-
-
 class GoToUrlAction(BaseModel):
 	url: str
 
@@ -15,13 +11,14 @@ class GoToUrlAction(BaseModel):
 class ClickElementAction(BaseModel):
 	index: int
 	xpath: Optional[str] = None
+	supatest_locator_id: Optional[str] = None
 
 
 class InputTextAction(BaseModel):
 	index: int
 	text: str
 	xpath: Optional[str] = None
-
+	supatest_locator_id: Optional[str] = None
 
 class DoneAction(BaseModel):
 	text: str
@@ -44,6 +41,17 @@ class SendKeysAction(BaseModel):
 
 class ExtractPageContentAction(BaseModel):
     value: str
+
+class SelectDropdownOptionAction(BaseModel):
+    index: int
+    text: str
+    xpath: Optional[str] = None
+    supatest_locator_id: Optional[str] = None
+
+class GetDropdownOptionsAction(BaseModel):
+    index: int
+    xpath: Optional[str] = None
+    supatest_locator_id: Optional[str] = None
 	
 class NoParamsAction(BaseModel):
 	"""
