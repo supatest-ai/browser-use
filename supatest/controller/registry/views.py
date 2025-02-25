@@ -7,7 +7,7 @@ from browser_use.controller.registry.views import (
 )
 
 
-class ActionModel(BaseModel):
+class SupatestActionModel(BaseModel):
     """Base model for dynamically created action models"""
 
     title: str = Field(description="Human readable description of what this action does")
@@ -46,7 +46,7 @@ class ActionModel(BaseModel):
 
 
 __all__ = [
-    'ActionModel',
+    'SupatestActionModel',
     'RegisteredAction',    
     'ActionRegistry',
 ] 

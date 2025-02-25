@@ -28,11 +28,11 @@ from langchain_core.messages import BaseMessage
 
 from browser_use.agent.service import Agent as BaseAgent
 from supatest.agent.views import ActionResult, AgentOutput, AgentBrain
-from supatest.browser.browser import SupatestBrowser as Browser
+from supatest.browser.browser import SupatestBrowser
 
-from supatest.browser.context import SupatestBrowserContext as BrowserContext
-from supatest.browser.views import SupatestBrowserState as BrowserState
-from supatest.controller.service import SupatestController as Controller
+from supatest.browser.context import SupatestBrowserContext
+from supatest.browser.views import SupatestBrowserState
+from supatest.controller.service import SupatestController
 from browser_use.telemetry.views import AgentStepTelemetryEvent
 from supatest.agent.views import AgentStepInfo, StepMetadata
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
@@ -41,19 +41,21 @@ logger = logging.getLogger(__name__)
 
 Context = TypeVar('Context')
 
-class Agent(BaseAgent[Context]):
+class SupatestAgent(BaseAgent[Context]):
     """Extended Agent class with custom implementations"""
+
+    browser_context: SupatestBrowserContext
 
     def __init__(
         self,
         task: str,
         llm: BaseChatModel,
-        browser: Browser | None = None,
-        browser_context: BrowserContext | None = None,
-        controller: Controller[Context] = Controller(),
+        browser: SupatestBrowser | None = None,
+        browser_context: SupatestBrowserContext | None = None,
+        controller: SupatestController[Context] = SupatestController(),
         sensitive_data: Optional[Dict[str, str]] = None,
         initial_actions: Optional[List[Dict[str, Dict[str, Any]]]] = None,
-        register_new_step_callback: Callable[['BrowserState', 'AgentOutput', int], Awaitable[None]] | None = None,
+        register_new_step_callback: Callable[['SupatestBrowserState', 'AgentOutput', int], Awaitable[None]] | None = None,
         register_done_callback: Callable[['AgentHistoryList'], Awaitable[None]] | None = None,
         register_external_agent_status_raise_error_callback: Callable[[], Awaitable[bool]] | None = None,
         send_message: Optional[Callable[[dict], Awaitable[bool]]] = None,

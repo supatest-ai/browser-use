@@ -15,7 +15,7 @@ from browser_use.agent.views import (
     AgentStepInfo,
     StepMetadata,
 )
-from supatest.controller.registry.views import ActionModel
+from supatest.controller.registry.views import SupatestActionModel
 
 
 class AgentBrain(BaseAgentBrain):
@@ -31,14 +31,14 @@ class AgentOutput(BaseAgentOutput):
     """Extended AgentOutput with custom implementation"""
     
     current_state: AgentBrain  # Use our custom AgentBrain
-    action: list[ActionModel] = Field(
+    action: list[SupatestActionModel] = Field(
         ...,
         description='List of actions to execute',
         json_schema_extra={'min_items': 1},
     )
 
     @staticmethod
-    def type_with_custom_actions(custom_actions: Type[ActionModel]) -> Type['AgentOutput']:
+    def type_with_custom_actions(custom_actions: Type[SupatestActionModel]) -> Type['AgentOutput']:
         """Extend actions with custom actions"""
         return create_model(
             'AgentOutput',
