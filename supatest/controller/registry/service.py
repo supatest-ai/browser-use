@@ -17,8 +17,8 @@ Context = TypeVar('Context')
 
 class Registry(BaseRegistry[Context]):
     """Extended version of Registry that supports supatest action model format"""
-
-    def create_action_model(self) -> Type[ActionModel]:
+	# def create_action_model(self, include_actions: Optional[list[str]] = None) -> Type[ActionModel]:
+    def create_action_model(self,include_actions: Optional[list[str]] = None) -> Type[ActionModel]:
         """Creates a Pydantic model from registered actions with supatest format"""
         fields = {
             'title': (str, Field(description="Human readable description of what this action does")),
