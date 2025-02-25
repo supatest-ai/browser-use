@@ -2,14 +2,9 @@ from typing import Callable, Dict, Type
 from pydantic import BaseModel, ConfigDict, Field
 
 from browser_use.controller.registry.views import (
-    RegisteredAction as BaseRegisteredAction,
-    ActionRegistry as BaseActionRegistry,
+    RegisteredAction,
+    ActionRegistry,
 )
-
-
-class RegisteredAction(BaseRegisteredAction):
-    """Extended version of RegisteredAction that maintains compatibility with browser_use"""
-    pass
 
 
 class ActionModel(BaseModel):
@@ -50,6 +45,8 @@ class ActionModel(BaseModel):
         action_params['supatest_locator_id'] = supatest_locator_id
 
 
-class ActionRegistry(BaseActionRegistry):
-    """Extended version of ActionRegistry that maintains compatibility with browser_use"""
-    pass 
+__all__ = [
+    'ActionModel',
+    'RegisteredAction',    
+    'ActionRegistry',
+] 

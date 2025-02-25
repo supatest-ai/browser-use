@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Type
+from typing import Type, Optional, List
 
 from pydantic import BaseModel, Field, create_model
 
@@ -9,7 +9,7 @@ from browser_use.agent.views import (
     AgentHistory as BaseAgentHistory,
     AgentOutput as BaseAgentOutput,
     ActionResult,
-    AgentHistoryList,
+    AgentHistoryList as BaseAgentHistoryList,
     AgentSettings,
     AgentState,
     AgentStepInfo,
@@ -19,12 +19,12 @@ from supatest.controller.registry.views import ActionModel
 
 
 class AgentBrain(BaseAgentBrain):
-    """Extended AgentBrain with additional thought field"""
-    
-    evaluation_previous_goal: str
-    memory: str
-    next_goal: str
-    thought: str  # Added custom field
+    """Extended version of AgentBrain that includes page_summary"""
+    page_summary: str = Field(default="", description="Summary of the current page state")
+    evaluation_previous_goal: str = Field(default="", description="Evaluation of previous goal")
+    memory: str = Field(default="", description="Agent's memory/context")
+    next_goal: str = Field(default="", description="Next goal to achieve")
+    thought: Optional[str] = Field(default=None, description="Current thought process")
 
 
 class AgentOutput(BaseAgentOutput):
@@ -55,6 +55,15 @@ class AgentHistory(BaseAgentHistory):
 
     class Config:
         arbitrary_types_allowed = True
+
+class AgentHistoryList(BaseAgentHistoryList):
+    """List of agent history items"""
+
+    history: list[AgentHistory]
+    
+    def model_thoughts(self) -> list[AgentBrain]:
+        """Get all thoughts from history"""
+        return [h.model_output.current_state for h in self.history if h.model_output]
 
 
 # Re-export other classes that we're not modifying

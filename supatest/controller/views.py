@@ -74,41 +74,4 @@ class NoParamsAction(BaseModel):
         extra = 'allow'
 
 
-# Action Type Enum and Union
-ActionType = Literal[
-    'goto',
-    'click',
-    'input',
-    'done',
-    'switch_tab',
-    'open_tab',
-    'scroll',
-    'send_keys',
-    'extract_page_content',
-    'select_dropdown_option',
-    'get_dropdown_options',
-    'back',
-    'forward',
-    'refresh',
-]
 
-Action = Union[
-    GoToUrlAction,
-    ClickElementAction,
-    InputTextAction,
-    DoneAction,
-    SwitchTabAction,
-    OpenTabAction,
-    ScrollAction,
-    SendKeysAction,
-    ExtractPageContentAction,
-    SelectDropdownOptionAction,
-    GetDropdownOptionsAction,
-    NoParamsAction,
-]
-
-
-# Action Request Model
-class ActionRequest(BaseModel):
-    type: ActionType
-    data: Action 
