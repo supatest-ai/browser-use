@@ -1,10 +1,11 @@
 import logging
 from typing import Optional, cast
+import asyncio
 
 from browser_use.browser.browser import Browser
 from browser_use.browser.context import BrowserContext as BaseBrowserContext
 from browser_use.browser.context import BrowserContextConfig, BrowserContextState
-from browser_use.browser.views import BrowserState
+from browser_use.browser.views import BrowserState, BrowserError
 from supatest.dom.service import SupatestDomService
 from supatest.dom.views import SupatestDOMElementNode
 
@@ -25,34 +26,55 @@ class SupatestBrowserContext(BaseBrowserContext):
         super().__init__(browser, config, state)
 
     async def _update_state(self, focus_element: int = -1) -> SupatestBrowserState:
-        """Override _update_state to use SupatestDomService and return SupatestBrowserState"""
-        logger.debug("[Supatest] Updating browser state")
-        page = await self.get_current_page()
+        """Update and return state with Supatest extensions."""
+        session = await self.get_session()
 
-        # Create SupatestDomService instead of DomService
-        dom_service = SupatestDomService(page)
-        dom_state = await dom_service.get_clickable_elements(
-            highlight_elements=self.config.highlight_elements,
-            focus_element=focus_element,
-            viewport_expansion=self.config.viewport_expansion,
-        )
+        # Check if current page is still valid, if not switch to another available page
+        try:
+            page = await self.get_current_page()
+            # Test if page is still accessible
+            await page.evaluate('1')
+        except Exception as e:
+            logger.debug(f'Current page is no longer accessible: {str(e)}')
+            # Get all available pages
+            pages = session.context.pages
+            if pages:
+                self.state.target_id = None
+                page = await self._get_current_page(session)
+                logger.debug(f'Switched to page: {await page.title()}')
+            else:
+                raise BrowserError('Browser closed: no valid pages available')
 
-        scroll_x, scroll_y = await self.get_scroll_info(page)
-        tabs = await self.get_tabs_info()
+        try:
+            await self.remove_highlights()
+            dom_service = SupatestDomService(page)
+            content = await dom_service.get_clickable_elements(
+                focus_element=focus_element,
+                viewport_expansion=self.config.viewport_expansion,
+                highlight_elements=self.config.highlight_elements,
+            )
 
-        state = SupatestBrowserState(
-            element_tree=cast(SupatestDOMElementNode, dom_state.element_tree),
-            selector_map=dom_state.selector_map,
-            url=page.url,
-            title=await page.title(),
-            scroll_x=scroll_x,
-            scroll_y=scroll_y,
-            tabs=tabs,
-        )
-        logger.debug(f"[Supatest] State updated with {len(state.selector_map)} elements")
-        for idx, element in state.selector_map.items():
-            logger.debug(f"[Supatest] State element {idx}: {element}, supatest_locator_id: {element.supatest_locator_id}")
-        return state
+            screenshot_b64 = await self.take_screenshot()
+            pixels_above, pixels_below = await self.get_scroll_info(page)
+
+            self.current_state = SupatestBrowserState(
+                element_tree=content.element_tree,
+                selector_map=content.selector_map,
+                url=page.url,
+                title=await page.title(),
+                tabs=await self.get_tabs_info(),
+                screenshot=screenshot_b64,
+                pixels_above=pixels_above,
+                pixels_below=pixels_below,
+            )
+
+            return self.current_state
+        except Exception as e:
+            logger.error(f'Failed to update state: {str(e)}')
+            # Return last known good state if available
+            if hasattr(self, 'current_state'):
+                return self.current_state
+            raise
 
     async def get_dom_element_by_index(self, index: int) -> SupatestDOMElementNode:
         """Override to return SupatestDOMElementNode instead of DOMElementNode"""
@@ -69,7 +91,13 @@ class SupatestBrowserContext(BaseBrowserContext):
         return element
 
     async def get_state(self) -> SupatestBrowserState:
-        """Override to return SupatestBrowserState instead of BrowserState"""
-        if self.session and self.session.cached_state:
-            return cast(SupatestBrowserState, self.session.cached_state)
-        return await self._update_state() 
+        """Get the current state of the browser with Supatest extensions"""
+        await self._wait_for_page_and_frames_load()
+        session = await self.get_session()
+        session.cached_state = await self._update_state()
+
+        # Save cookies if a file is specified
+        if self.config.cookies_file:
+            asyncio.create_task(self.save_cookies())
+
+        return session.cached_state 

@@ -11,8 +11,9 @@ from dotenv import load_dotenv
 from pydantic import SecretStr
 from langchain_openai import AzureChatOpenAI
 
-from supatest import Agent
-from supatest import Browser
+from supatest import SupatestAgent
+from supatest import SupatestBrowser
+from supatest import SupatestBrowserContext
 from supatest import BrowserContextConfig, BrowserConfig
 # Load environment variables
 load_dotenv()
@@ -23,7 +24,7 @@ for var in required_env_vars:
     if not os.getenv(var):
         raise ValueError(f"{var} is not set. Please add it to your environment variables.")
 
-browser = Browser(
+browser = SupatestBrowser(
 	config=BrowserConfig(
 		headless=False,  # This is True in production
 		disable_security=True,
@@ -40,6 +41,7 @@ browser = Browser(
 		),
 	)
 )
+browser_context = SupatestBrowserContext(browser=browser)
 llm = AzureChatOpenAI(
 	model='gpt-4o',
 	api_version='2024-10-21',
@@ -58,10 +60,11 @@ Find and book a hotel in Paris with suitable accommodations for a family of four
 
 
 async def main():
-	agent = Agent(
+	agent = SupatestAgent(
 		task=TASK,
 		llm=llm,
 		browser=browser,
+		browser_context=browser_context,
 	)
 	history = await agent.run(max_steps=50)
 	history.save_to_file('./tmp/history.json')

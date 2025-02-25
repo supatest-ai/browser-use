@@ -10,7 +10,7 @@ from browser_use.telemetry.views import (
 )
 from supatest.browser.context import SupatestBrowserContext
 
-from supatest.controller.registry.views import ActionModel
+from supatest.controller.registry.views import SupatestActionModel
 
 Context = TypeVar('Context')
 
@@ -18,7 +18,7 @@ Context = TypeVar('Context')
 class Registry(BaseRegistry[Context]):
     """Extended version of Registry that supports supatest action model format"""
 	# def create_action_model(self, include_actions: Optional[list[str]] = None) -> Type[ActionModel]:
-    def create_action_model(self,include_actions: Optional[list[str]] = None) -> Type[ActionModel]:
+    def create_action_model(self,include_actions: Optional[list[str]] = None) -> Type[SupatestActionModel]:
         """Creates a Pydantic model from registered actions with supatest format"""
         fields = {
             'title': (str, Field(description="Human readable description of what this action does")),
@@ -40,7 +40,7 @@ class Registry(BaseRegistry[Context]):
             )
         )
 
-        return create_model('ActionModel', __base__=ActionModel, **fields)  # type: ignore
+        return create_model('ActionModel', __base__=SupatestActionModel, **fields)  # type: ignore
 
     async def execute_action(
         self,
