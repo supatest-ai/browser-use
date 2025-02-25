@@ -12,7 +12,7 @@ from browser_use.dom.service import DomService, ViewportInfo
 from browser_use.dom.views import DOMBaseNode, DOMTextNode, CoordinateSet, DOMElementNode
 from browser_use.utils import time_execution_async
 
-from .views import SupatestDOMElementNode, SupatestDOMState
+from supatest.dom.views import SupatestDOMElementNode, SupatestDOMState
 
 logger = logging.getLogger(__name__)
 
