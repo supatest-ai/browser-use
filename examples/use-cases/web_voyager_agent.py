@@ -11,10 +11,12 @@ from dotenv import load_dotenv
 from pydantic import SecretStr
 from langchain_openai import AzureChatOpenAI
 
+from browser_use import BrowserConfig
+from browser_use import BrowserContextConfig
+
 from supatest import SupatestAgent
 from supatest import SupatestBrowser
 from supatest import SupatestBrowserContext
-from supatest import BrowserContextConfig, BrowserConfig
 # Load environment variables
 load_dotenv()
 

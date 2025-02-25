@@ -1,10 +1,10 @@
-from browser_use.browser.browser import Browser as BaseBrowser
+from browser_use.browser.browser import Browser
 from browser_use.browser.context import BrowserContextConfig, BrowserContextState
 
 from supatest.browser.context import SupatestBrowserContext
 
 
-class SupatestBrowser(BaseBrowser):
+class SupatestBrowser(Browser):
     """Extended version of Browser that uses SupatestBrowserContext"""
 
     async def create_context(

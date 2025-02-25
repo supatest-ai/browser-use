@@ -1,12 +1,6 @@
 from typing import Callable, Dict, Type
 from pydantic import BaseModel, ConfigDict, Field
 
-from browser_use.controller.registry.views import (
-    RegisteredAction,
-    ActionRegistry,
-)
-
-
 class SupatestActionModel(BaseModel):
     """Base model for dynamically created action models"""
 
@@ -46,7 +40,5 @@ class SupatestActionModel(BaseModel):
 
 
 __all__ = [
-    'SupatestActionModel',
-    'RegisteredAction',    
-    'ActionRegistry',
-] 
+    'SupatestActionModel'
+]
