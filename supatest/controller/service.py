@@ -1,13 +1,13 @@
 import asyncio
 import json
 import logging
-from typing import Dict, Generic, Optional, Type, TypeVar
+from typing import Dict, Generic, Optional, Type, TypeVar, Union
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel
 
-from browser_use.agent.views import ActionResult
+from supatest.agent.views import ActionResult
 from browser_use.controller.service import Controller as BaseController
 from browser_use.utils import time_execution_sync
 
@@ -462,7 +462,7 @@ class SupatestController(BaseController[Context]):
         except Exception as e:
             raise e
 
-    def _process_result(self, result: Any) -> ActionResult:
+    def _process_result(self, result: Union[str, ActionResult, None]) -> ActionResult:
         """Process the result of an action execution"""
         if isinstance(result, str):
             return ActionResult(extracted_content=result)

@@ -1,7 +1,7 @@
 from browser_use.browser.browser import Browser as BaseBrowser
 from browser_use.browser.context import BrowserContextConfig, BrowserContextState
 
-from .context import SupatestBrowserContext
+from supatest.browser.context import SupatestBrowserContext
 
 
 class SupatestBrowser(BaseBrowser):

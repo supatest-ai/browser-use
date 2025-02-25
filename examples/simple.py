@@ -1,14 +1,14 @@
 import asyncio
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 
-from browser_use import Agent
+from supatest.agent.service import Agent
 
 load_dotenv()
 
 # Initialize the model
-llm = ChatOpenAI(
+llm = AzureChatOpenAI(
 	model='gpt-4o',
 	temperature=0.0,
 )

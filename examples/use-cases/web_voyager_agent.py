@@ -11,14 +11,14 @@ from dotenv import load_dotenv
 from pydantic import SecretStr
 from langchain_openai import AzureChatOpenAI
 
-from browser_use.agent.service import Agent
-from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
-
+from supatest import Agent
+from supatest import Browser
+from supatest import BrowserContextConfig, BrowserConfig
 # Load environment variables
 load_dotenv()
 
 # Validate required environment variables
-required_env_vars = ["AZURE_OPENAI_KEY", "AZURE_OPENAI_ENDPOINT"]
+required_env_vars = ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"]
 for var in required_env_vars:
     if not os.getenv(var):
         raise ValueError(f"{var} is not set. Please add it to your environment variables.")
@@ -44,7 +44,7 @@ llm = AzureChatOpenAI(
 	model='gpt-4o',
 	api_version='2024-10-21',
 	azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
-	api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
+	api_key=SecretStr(os.getenv('AZURE_OPENAI_API_KEY', '')),
 )
 
 # TASK = """
@@ -62,7 +62,6 @@ async def main():
 		task=TASK,
 		llm=llm,
 		browser=browser,
-		validate_output=True,
 	)
 	history = await agent.run(max_steps=50)
 	history.save_to_file('./tmp/history.json')
