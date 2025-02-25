@@ -1,22 +1,40 @@
 from __future__ import annotations
 
+
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional, TypeVar
+import re
+import time
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar
+
+from dotenv import load_dotenv
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import (
+	BaseMessage,
+	HumanMessage,
+	SystemMessage,
+)
+
+# from lmnr.sdk.decorators import observe
+from pydantic import BaseModel, ValidationError
+
+
+
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
-from pydantic import ValidationError
 
 from browser_use.agent.service import Agent as BaseAgent
 from supatest.agent.views import ActionResult
 from supatest.browser.browser import SupatestBrowser as Browser
+
 from supatest.browser.context import SupatestBrowserContext as BrowserContext
 from supatest.browser.views import SupatestBrowserState as BrowserState
 from supatest.controller.service import SupatestController as Controller
 from browser_use.telemetry.views import AgentStepTelemetryEvent
-from supatest.agent.views import AgentOutput
+from supatest.agent.views import AgentOutput, AgentStepInfo
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 
 logger = logging.getLogger(__name__)
@@ -68,10 +86,14 @@ class Agent(BaseAgent[Context]):
 
         if self.model_name == 'deepseek-reasoner' or self.model_name.startswith('deepseek-r1'):
             output = self.llm.invoke(converted_input_messages)
+            print(f"output: {output}")
             output.content = self._remove_think_tags(str(output.content))
+            print(f"output.content: {output.content}")
             try:
                 parsed_json = self._message_manager.extract_json_from_model_output(output.content)
+                print(f"parsed_json: {parsed_json}")
                 parsed = self.AgentOutput(**parsed_json)
+                print(f"parsed: {parsed}")
             except (ValueError, ValidationError) as e:
                 logger.warning(f'Failed to parse model output: {output} {str(e)}')
                 raise ValueError('Could not parse response.')
@@ -79,6 +101,8 @@ class Agent(BaseAgent[Context]):
             structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
             parsed: AgentOutput | None = response['parsed']
+            print(f"response: {response}")
+            print(f"parsed: {parsed}")
 
         if parsed is None:
             raise ValueError('Could not parse response.')
