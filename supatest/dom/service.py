@@ -82,7 +82,7 @@ class SupatestDomService(DomService):
         js_node_map = eval_page['map']
         js_root_id = eval_page['rootId']
 
-        selector_map = {}
+        selector_map: Dict[int, SupatestDOMElementNode] = {}
         node_map = {}
 
         for id, node_data in js_node_map.items():
@@ -105,7 +105,7 @@ class SupatestDomService(DomService):
                     child_node.parent = node
                     node.children.append(child_node)
 
-        html_to_dict = node_map[str(js_root_id)]
+        root_node = node_map[str(js_root_id)]
 
         del node_map
         del js_node_map
@@ -113,11 +113,11 @@ class SupatestDomService(DomService):
 
         gc.collect()
 
-        if html_to_dict is None or not isinstance(html_to_dict, SupatestDOMElementNode):
+        if root_node is None or not isinstance(root_node, SupatestDOMElementNode):
             raise ValueError('Failed to parse HTML to dictionary')
 
-        logger.debug(f"[Supatest] DOM tree construction complete, root node: {html_to_dict}")
-        return html_to_dict, selector_map
+        logger.debug(f"[Supatest] DOM tree construction complete, root node: {root_node}")
+        return root_node, selector_map
 
     def _parse_node(
         self,
@@ -167,7 +167,7 @@ class SupatestDomService(DomService):
                     height=p['height'],
                 )
 
-        # Create element node with supatest_locator_id
+        # Create SupatestDOMElementNode instead of DOMElementNode
         element_node = SupatestDOMElementNode(
             tag_name=node_data['tagName'],
             xpath=node_data['xpath'],
