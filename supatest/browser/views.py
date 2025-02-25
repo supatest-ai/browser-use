@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from browser_use.browser.views import (
-    BrowserError,
     BrowserState,
     TabInfo,
     URLNotAllowedError,

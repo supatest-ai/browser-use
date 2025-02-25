@@ -184,10 +184,6 @@ class SupatestDomService(DomService):
             viewport_info=viewport_info,
             supatest_locator_id=node_data.get('supatest_locator_id')
         )
-
-        # print(f"element_node: {element_node}")
-        # print(f"element_node.supatest_locator_id: {element_node.supatest_locator_id}")
-
         logger.debug(f"[Supatest] Created element node: {element_node}, supatest_locator_id: {element_node.supatest_locator_id}")
 
         children_ids = node_data.get('children', [])

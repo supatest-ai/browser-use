@@ -3,7 +3,7 @@ from typing import Any, Dict, Generic, Optional, Type, TypeVar
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel, Field, create_model
 
-from browser_use.controller.registry.service import Registry as BaseRegistry
+from browser_use.controller.registry.service import Registry
 from browser_use.telemetry.views import (
     ControllerRegisteredFunctionsTelemetryEvent,
     RegisteredFunction,
@@ -15,7 +15,7 @@ from supatest.controller.registry.views import SupatestActionModel
 Context = TypeVar('Context')
 
 
-class Registry(BaseRegistry[Context]):
+class Registry(Registry[Context]):
     """Extended version of Registry that supports supatest action model format"""
 	# def create_action_model(self, include_actions: Optional[list[str]] = None) -> Type[ActionModel]:
     def create_action_model(self,include_actions: Optional[list[str]] = None) -> Type[SupatestActionModel]:

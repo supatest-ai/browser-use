@@ -2,12 +2,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from browser_use.dom.views import (
-    DOMBaseNode,
-    DOMTextNode,
     DOMState,
-    SelectorMap,
-    ViewportInfo,
-    CoordinateSet,
     DOMElementNode,
 )
 

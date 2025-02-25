@@ -7,12 +7,11 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel
 
-from supatest.agent.views import ActionResult
-from browser_use.controller.service import Controller as BaseController
+from browser_use.agent.views import ActionResult
+from browser_use.controller.service import Controller
 from browser_use.utils import time_execution_sync
 
 from supatest.browser.context import SupatestBrowserContext
-from supatest.dom.views import SupatestDOMElementNode
 from supatest.controller.registry.service import Registry
 from supatest.controller.views import (
     ClickElementAction,
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 Context = TypeVar('Context')
 
 
-class SupatestController(BaseController[Context]):
+class SupatestController(Controller[Context]):
     """Extended version of Controller that supports supatest functionality"""
 
     def __init__(

@@ -20,28 +20,26 @@ from langchain_core.messages import (
 # from lmnr.sdk.decorators import observe
 from pydantic import BaseModel, ValidationError
 
-
-
-
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
-from browser_use.agent.service import Agent as BaseAgent
-from supatest.agent.views import ActionResult, AgentOutput, AgentBrain
-from supatest.browser.browser import SupatestBrowser
+from browser_use.agent.service import Agent
+from browser_use.agent.views import ActionResult
+from browser_use.telemetry.views import AgentStepTelemetryEvent
+from browser_use.agent.views import AgentStepInfo, StepMetadata
+from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 
+from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain
+from supatest.browser.browser import SupatestBrowser
 from supatest.browser.context import SupatestBrowserContext
 from supatest.browser.views import SupatestBrowserState
 from supatest.controller.service import SupatestController
-from browser_use.telemetry.views import AgentStepTelemetryEvent
-from supatest.agent.views import AgentStepInfo, StepMetadata
-from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 
 logger = logging.getLogger(__name__)
 
 Context = TypeVar('Context')
 
-class SupatestAgent(BaseAgent[Context]):
+class SupatestAgent(Agent[Context]):
     """Extended Agent class with custom implementations"""
 
     browser_context: SupatestBrowserContext
@@ -86,12 +84,12 @@ class SupatestAgent(BaseAgent[Context]):
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
         # Create output model with the dynamic actions and our extended AgentBrain
-        self.AgentOutput = AgentOutput.type_with_custom_actions(self.ActionModel)
+        self.AgentOutput = SupatestAgentOutput.type_with_custom_actions(self.ActionModel)
         # Create done action model for final step
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'])
-        self.DoneAgentOutput = AgentOutput.type_with_custom_actions(self.DoneActionModel)
+        self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
 
-    async def get_next_action(self, input_messages: list[BaseMessage]) -> AgentOutput:
+    async def get_next_action(self, input_messages: list[BaseMessage]) -> SupatestAgentOutput:
         """Get next action from LLM based on current state with custom handling"""
         converted_input_messages = self._convert_input_messages(input_messages)
 
@@ -111,7 +109,7 @@ class SupatestAgent(BaseAgent[Context]):
         else:
             structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
-            parsed: AgentOutput | None = response['parsed']
+            parsed: SupatestAgentOutput | None = response['parsed']
 
         if parsed is None:
             raise ValueError('Could not parse response.')
@@ -132,7 +130,7 @@ class SupatestAgent(BaseAgent[Context]):
         await self._log_response(parsed)
         return parsed
 
-    async def _log_response(self, response: AgentOutput) -> None:
+    async def _log_response(self, response: SupatestAgentOutput) -> None:
         """Log the model's response with custom websocket messaging"""
         if 'Success' in response.current_state.evaluation_previous_goal:
             emoji = '👍'

@@ -3,7 +3,7 @@ from typing import Optional, cast
 import asyncio
 
 from browser_use.browser.browser import Browser
-from browser_use.browser.context import BrowserContext as BaseBrowserContext
+from browser_use.browser.context import BrowserContext
 from browser_use.browser.context import BrowserContextConfig, BrowserContextState
 from browser_use.browser.views import BrowserState, BrowserError
 from supatest.dom.service import SupatestDomService
@@ -14,7 +14,7 @@ from supatest.browser.views import SupatestBrowserState
 logger = logging.getLogger(__name__)
 
 
-class SupatestBrowserContext(BaseBrowserContext):
+class SupatestBrowserContext(BrowserContext):
     """Extended version of BrowserContext that uses SupatestDOMElementNode"""
 
     def __init__(
