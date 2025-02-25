@@ -27,14 +27,14 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
 from browser_use.agent.service import Agent as BaseAgent
-from supatest.agent.views import ActionResult
+from supatest.agent.views import ActionResult, AgentOutput, AgentBrain
 from supatest.browser.browser import SupatestBrowser as Browser
 
 from supatest.browser.context import SupatestBrowserContext as BrowserContext
 from supatest.browser.views import SupatestBrowserState as BrowserState
 from supatest.controller.service import SupatestController as Controller
 from browser_use.telemetry.views import AgentStepTelemetryEvent
-from supatest.agent.views import AgentOutput, AgentStepInfo
+from supatest.agent.views import AgentStepInfo, StepMetadata
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,15 @@ class Agent(BaseAgent[Context]):
         self.requestId = requestId
         self.testCaseId = testCaseId
 
+    def _setup_action_models(self) -> None:
+        """Setup dynamic action models from controller's registry using our extended AgentOutput"""
+        self.ActionModel = self.controller.registry.create_action_model()
+        # Create output model with the dynamic actions and our extended AgentBrain
+        self.AgentOutput = AgentOutput.type_with_custom_actions(self.ActionModel)
+        # Create done action model for final step
+        self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'])
+        self.DoneAgentOutput = AgentOutput.type_with_custom_actions(self.DoneActionModel)
+
     async def get_next_action(self, input_messages: list[BaseMessage]) -> AgentOutput:
         """Get next action from LLM based on current state with custom handling"""
         converted_input_messages = self._convert_input_messages(input_messages)
@@ -101,8 +110,6 @@ class Agent(BaseAgent[Context]):
             structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
             parsed: AgentOutput | None = response['parsed']
-            print(f"response: {response}")
-            print(f"parsed: {parsed}")
 
         if parsed is None:
             raise ValueError('Could not parse response.')

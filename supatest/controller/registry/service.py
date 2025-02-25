@@ -61,18 +61,26 @@ class Registry(BaseRegistry[Context]):
             # Create the validated Pydantic model
             validated_params = action.param_model(**params)
 
-            # Add any extra arguments needed for the action
+            # Add only required arguments based on action name
             extra_args = {}
             if browser:
                 extra_args['browser'] = browser
-            if page_extraction_llm:
+            
+            # Only add page_extraction_llm for extract_content action
+            if action_name == 'extract_content' and page_extraction_llm:
                 extra_args['page_extraction_llm'] = page_extraction_llm
-            if available_file_paths:
+            
+            # Only add available_file_paths for file-related actions
+            if action_name in ['upload_file', 'download_file'] and available_file_paths:
                 extra_args['available_file_paths'] = available_file_paths
+            
+            # Add context if provided and action accepts it
             if context:
                 extra_args['context'] = context
-            # if action_name == 'input_text' and sensitive_data:
-            #     extra_args['has_sensitive_data'] = True
+
+            # Add has_sensitive_data flag for input_text action
+            if action_name == 'input_text' and sensitive_data:
+                extra_args['has_sensitive_data'] = True
 
             # Execute the action with validated parameters
             return await action.function(validated_params, **extra_args)
