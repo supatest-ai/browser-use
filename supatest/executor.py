@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from typing import Optional
+import asyncio
 
 import socketio
 from langchain_openai import AzureChatOpenAI
@@ -86,10 +87,15 @@ class Executor:
             # Run the automation task
             await agent.run()
             logger.info("Automation completed successfully")
+            
+            # Add a small delay to ensure final messages are sent before disconnection
+            await asyncio.sleep(1)
 
         except Exception as e:
             logger.error(f"Automation failed: {str(e)}", exc_info=True)
             await self.handler.emit_automation_error(sio, goal_id, str(e), requestId, testCaseId)
+            # Add a small delay after error messages too
+            await asyncio.sleep(1)
         finally:
             logger.info("Disconnecting from automation")
             try:
