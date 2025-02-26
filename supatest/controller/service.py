@@ -60,7 +60,7 @@ class SupatestController(Controller[Context]):
                 return ActionResult(is_done=True, success=params.success, extracted_content=json.dumps(output_dict))
         else:
             @self.registry.action(
-                'Complete task - with return text and if the task is finished',
+                'Complete task - with return text and if the task is finished (success=True) or not yet  completly finished (success=False), because last step is reached',
                 param_model=DoneAction,
             )
             async def done(params: DoneAction):
@@ -190,7 +190,7 @@ class SupatestController(Controller[Context]):
             logger.info(msg)
             return ActionResult(extracted_content=msg, include_in_memory=True)
 
-        @self.registry.action('Extract page content', param_model=ExtractPageContentAction)
+        @self.registry.action('Extract page content to retrieve specific information from the page, e.g. all company names, a specifc description, all information about, links with companies in structured format or simply links', param_model=ExtractPageContentAction)
         async def extract_content(params: ExtractPageContentAction, browser: SupatestBrowserContext, page_extraction_llm: BaseChatModel):
             page = await browser.get_current_page()
             import markdownify
@@ -210,7 +210,7 @@ class SupatestController(Controller[Context]):
                 logger.info(msg)
                 return ActionResult(extracted_content=msg)
 
-        @self.registry.action('Scroll down the page', param_model=ScrollAction)
+        @self.registry.action('Scroll down the page by pixel amount - if no amount is specified, scroll down one page', param_model=ScrollAction)
         async def scroll_down(params: ScrollAction, browser: SupatestBrowserContext):
             page = await browser.get_current_page()
             if params.amount is not None:
@@ -223,7 +223,7 @@ class SupatestController(Controller[Context]):
             logger.info(msg)
             return ActionResult(extracted_content=msg, include_in_memory=True)
 
-        @self.registry.action('Scroll up the page', param_model=ScrollAction)
+        @self.registry.action('Scroll up the page by pixel amount - if no amount is specified, scroll up one page', param_model=ScrollAction)
         async def scroll_up(params: ScrollAction, browser: SupatestBrowserContext):
             page = await browser.get_current_page()
             if params.amount is not None:
