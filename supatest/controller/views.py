@@ -41,10 +41,6 @@ class SendKeysAction(BaseModel):
     keys: str
 
 
-class ExtractPageContentAction(BaseModel):
-    value: str
-
-
 class SelectDropdownOptionAction(BaseModel):
     index: int
     text: str

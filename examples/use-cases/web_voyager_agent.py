@@ -55,8 +55,8 @@ llm = AzureChatOpenAI(
 # TASK = """
 # Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
 # """
-TASK = """
-Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
+# TASK = """
+# Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
 # TASK = """
 # Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
 # """
@@ -65,9 +65,9 @@ Browse Coursera, which universities offer Master of Advanced Study in Engineerin
 # Go to https://blazedemo.com/index.php and select Boston for departure and London for destination. Then click on Find Flights. Select the first flight and click on Choose This Flight. Then on the next page, scroll down by some amount and just do nothing. Do nothing after that.
 # """
 
-# TASK = """
-# Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
-# """
+TASK = """
+Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
+"""
 
 # TASK = """
 # Browse coursera using https://www.coursera.org/ and then scroll down by one page and then scroll up by 500. Then do nothing.
