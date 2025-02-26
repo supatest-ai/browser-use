@@ -61,18 +61,21 @@ llm = AzureChatOpenAI(
 # Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
 # """
 
+# TASK = """
+# Go to https://blazedemo.com/index.php and select Boston for departure and London for destination. Then click on Find Flights. Select the first flight and click on Choose This Flight. Then on the next page, scroll down by some amount and just do nothing. Do nothing after that.
+# """
+
+# TASK = """
+# Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
+# """
+
+# TASK = """
+# Browse coursera using https://www.coursera.org/ and then scroll down by 1500 and then scroll up by 500. Don't do anything else. Then open a new tab and go to https://blazedemo.com/index.php and extract content. Then verify this text: 'The is a sample site you can test with BlazeMeter!'. Then do nothing.
+# """
+
 TASK = """
-Go to https://blazedemo.com/index.php and select Boston for departure and London for destination. Then click on Find Flights. Select the first flight and click on Choose This Flight. Then on the next page, scroll down by some amount and just do nothing. Do nothing after that.
+Browse coursera using https://www.coursera.org/ and then scroll down by 1500 (follow this number exactly) and then scroll up by 500. Then do nothing.
 """
-
-# TASK = """
-# Go to https://blazedemo.com/index.php and get dropdown options for departure city and destination city. Just do nothing after that.
-# """
-
-# TASK = """
-# Open a new tab and go to https://www.coursera.org/ and then scroll down by some amount. Don't do anything else.
-# """
-
 
 async def main():
 	agent = SupatestAgent(

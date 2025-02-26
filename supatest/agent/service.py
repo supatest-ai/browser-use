@@ -29,6 +29,7 @@ from browser_use.agent.views import ActionResult
 from browser_use.telemetry.views import AgentStepTelemetryEvent
 from browser_use.agent.views import AgentStepInfo, StepMetadata
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
+from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
 
 from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain, SupatestAgentHistoryList
 from supatest.browser.browser import SupatestBrowser
@@ -63,6 +64,23 @@ class SupatestAgent(Agent[Context]):
         testCaseId: Optional[str] = None,
         **kwargs
     ):
+        # Get custom action descriptions from our registry before calling super().__init__
+        # This ensures our custom actions are used throughout initialization
+        controller_registry = controller.registry
+        available_actions = controller_registry.get_prompt_description()
+        
+        # Create an explicit list of available actions to extend the system prompt
+        available_action_names = list(controller_registry.registry.actions.keys())
+        explicit_actions_list = f"\n\nIMPORTANT: You MUST ONLY use the following actions: {', '.join(available_action_names)}.\n"
+        explicit_actions_list += "DO NOT use any actions not listed above, especially do not use 'input_select'.\n"
+        explicit_actions_list += "For dropdown selection, use 'select_dropdown_option' with parameters 'index' and 'text'.\n"
+        
+        # Extend the system message with our explicit actions list
+        if 'extend_system_message' in kwargs:
+            kwargs['extend_system_message'] += explicit_actions_list
+        else:
+            kwargs['extend_system_message'] = explicit_actions_list
+        
         super().__init__(
             task=task,
             llm=llm,
@@ -80,6 +98,31 @@ class SupatestAgent(Agent[Context]):
         self.goal_step_id = goal_step_id
         self.requestId = requestId
         self.testCaseId = testCaseId
+
+        # Store our custom action descriptions
+        self.available_actions = available_actions
+        
+        # Reinitialize the message manager with our custom action descriptions
+        self._message_manager = MessageManager(
+            task=task,
+            system_message=SystemPrompt(
+                action_description=self.available_actions,
+                max_actions_per_step=self.settings.max_actions_per_step,
+                override_system_message=self.settings.override_system_message,
+                extend_system_message=self.settings.extend_system_message,
+            ).get_system_message(),
+            settings=MessageManagerSettings(
+                max_input_tokens=self.settings.max_input_tokens,
+                include_attributes=self.settings.include_attributes,
+                message_context=self.settings.message_context,
+                sensitive_data=sensitive_data,
+                available_file_paths=self.settings.available_file_paths,
+            ),
+            state=self.state.message_manager_state,
+        )
+        
+        # Log the system prompt to verify action descriptions are included
+        logger.debug(f"Initialized SupatestAgent with custom action descriptions. Available actions: {self.available_actions}")
 
         self._setup_action_models()
 
