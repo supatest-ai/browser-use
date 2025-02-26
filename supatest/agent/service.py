@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar
 
+from browser_use.agent.message_manager.utils import extract_json_from_model_output
 from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -53,8 +54,8 @@ class SupatestAgent(Agent[Context]):
         controller: SupatestController[Context] = SupatestController(),
         sensitive_data: Optional[Dict[str, str]] = None,
         initial_actions: Optional[List[Dict[str, Dict[str, Any]]]] = None,
-        register_new_step_callback: Callable[['SupatestBrowserState', 'AgentOutput', int], Awaitable[None]] | None = None,
-        register_done_callback: Callable[['AgentHistoryList'], Awaitable[None]] | None = None,
+        register_new_step_callback: Callable[['SupatestBrowserState', 'SupatestAgentOutput', int], Awaitable[None]] | None = None,
+        register_done_callback: Callable[['SupatestAgentHistoryList'], Awaitable[None]] | None = None,
         register_external_agent_status_raise_error_callback: Callable[[], Awaitable[bool]] | None = None,
         send_message: Optional[Callable[[dict], Awaitable[bool]]] = None,
         goal_step_id: Optional[str] = None,
@@ -80,6 +81,9 @@ class SupatestAgent(Agent[Context]):
         self.requestId = requestId
         self.testCaseId = testCaseId
 
+        self._setup_action_models()
+
+
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
@@ -90,22 +94,24 @@ class SupatestAgent(Agent[Context]):
         self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
 
     async def get_next_action(self, input_messages: list[BaseMessage]) -> SupatestAgentOutput:
-        """Get next action from LLM based on current state with custom handling"""
-        converted_input_messages = self._convert_input_messages(input_messages)
+        """Get next action from LLM based on current state"""
+        input_messages = self._convert_input_messages(input_messages)
 
-        if self.model_name == 'deepseek-reasoner' or self.model_name.startswith('deepseek-r1'):
-            output = self.llm.invoke(converted_input_messages)
-            print(f"output: {output}")
+        if self.tool_calling_method == 'raw':
+            output = self.llm.invoke(input_messages)
+            # TODO: currently invoke does not return reasoning_content, we should override invoke
             output.content = self._remove_think_tags(str(output.content))
-            print(f"output.content: {output.content}")
             try:
-                parsed_json = self._message_manager.extract_json_from_model_output(output.content)
-                print(f"parsed_json: {parsed_json}")
+                parsed_json = extract_json_from_model_output(output.content)
                 parsed = self.AgentOutput(**parsed_json)
-                print(f"parsed: {parsed}")
             except (ValueError, ValidationError) as e:
                 logger.warning(f'Failed to parse model output: {output} {str(e)}')
                 raise ValueError('Could not parse response.')
+
+        elif self.tool_calling_method is None:
+            structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True)
+            response: dict[str, Any] = await structured_llm.ainvoke(input_messages)  # type: ignore
+            parsed: SupatestAgentOutput | None = response['parsed']
         else:
             structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
