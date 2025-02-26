@@ -29,7 +29,7 @@ from browser_use.telemetry.views import AgentStepTelemetryEvent
 from browser_use.agent.views import AgentStepInfo, StepMetadata
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 
-from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain
+from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain, SupatestAgentHistoryList
 from supatest.browser.browser import SupatestBrowser
 from supatest.browser.context import SupatestBrowserContext
 from supatest.browser.views import SupatestBrowserState
@@ -127,7 +127,6 @@ class SupatestAgent(Agent[Context]):
         parsed.action = parsed.action[: self.settings.max_actions_per_step]
         self.state.n_steps += 1
 
-        await self._log_response(parsed)
         return parsed
 
     async def _log_response(self, response: SupatestAgentOutput) -> None:
@@ -220,6 +219,7 @@ class SupatestAgent(Agent[Context]):
 
             try:
                 model_output = await self.get_next_action(self._message_manager.get_messages())
+                await self._log_response(model_output)
 
                 if self.register_new_step_callback:
                     await self.register_new_step_callback(state, model_output, self.state.n_steps)
@@ -287,7 +287,7 @@ class SupatestAgent(Agent[Context]):
                 )
                 self._make_history_item(model_output, state, result, metadata)
 
-    async def run(self, max_steps: int = 100) -> AgentHistoryList:
+    async def run(self, max_steps: int = 100) -> SupatestAgentHistoryList:
         """Execute the task with maximum number of steps and custom completion handling"""
         try:
             self._log_agent_run()
@@ -318,13 +318,20 @@ class SupatestAgent(Agent[Context]):
                             continue
 
                     logger.info('✅ Task completed successfully')
-                    if self.send_message:
-                        await self._send_message("AGENT_GOAL_STOP_RES", {
-                            "requestId": self.requestId,
-                            "testCaseId": self.testCaseId,
-                            "success": True,
-                            "error": None,
-                        })
+                    
+                    try:
+                        if self.send_message:
+                            await self._send_message("AGENT_GOAL_STOP_RES", {
+                                "requestId": self.requestId,
+                                "testCaseId": self.testCaseId,
+                                "success": True,
+                                "error": None,
+                            })
+                    except Exception as e:
+                        logger.warning(f"Failed to send goal stop message: {str(e)}")
+                        
+                    if self.register_done_callback:
+                        await self.register_done_callback(self.state.history)
                     break
             else:
                 logger.info('❌ Failed to complete task in maximum steps')
