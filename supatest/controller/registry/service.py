@@ -10,14 +10,45 @@ from browser_use.telemetry.views import (
 )
 from supatest.browser.context import SupatestBrowserContext
 
-from supatest.controller.registry.views import SupatestActionModel
+from supatest.controller.registry.views import SupatestActionModel, SupatestActionRegistry, SupatestRegisteredAction
 
 Context = TypeVar('Context')
 
 
-class Registry(Registry[Context]):
+class SupatestRegistry(Registry[Context]):
     """Extended version of Registry that supports supatest action model format"""
-	# def create_action_model(self, include_actions: Optional[list[str]] = None) -> Type[ActionModel]:
+    
+    def __init__(self, exclude_actions: list[str] = []):
+        """Initialize with our custom SupatestActionRegistry instead of the base ActionRegistry"""
+        # Initialize base attributes but replace registry with our custom one
+        super().__init__(exclude_actions)
+        self.registry = SupatestActionRegistry()
+    
+    # Override the action decorator to use SupatestRegisteredAction
+    def action(self, description: str, param_model: Optional[Type[BaseModel]] = None):
+        """Decorator for registering actions with supatest format"""
+        def decorator(func):
+            if self.exclude_actions and func.__name__ in self.exclude_actions:
+                return func
+
+            if param_model is None:
+                # Create param model from function signature
+                created_param_model = self._create_param_model(func)
+            else:
+                created_param_model = param_model
+
+            # Use SupatestRegisteredAction instead of RegisteredAction
+            self.registry.actions[func.__name__] = SupatestRegisteredAction(
+                name=func.__name__,
+                description=description,
+                function=func,
+                param_model=created_param_model,
+            )
+
+            return func
+
+        return decorator
+    
     def create_action_model(self,include_actions: Optional[list[str]] = None) -> Type[SupatestActionModel]:
         """Creates a Pydantic model from registered actions with supatest format"""
         fields = {
@@ -63,7 +94,9 @@ class Registry(Registry[Context]):
 
             # Add only required arguments based on action name
             extra_args = {}
-            if browser:
+            
+            # Only add browser for actions that need it (exclude 'done' action)
+            if browser and action_name != 'done':
                 extra_args['browser'] = browser
             
             # Only add page_extraction_llm for extract_content action
