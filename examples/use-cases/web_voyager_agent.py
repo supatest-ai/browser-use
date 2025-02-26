@@ -11,8 +11,9 @@ from dotenv import load_dotenv
 from pydantic import SecretStr
 from langchain_openai import AzureChatOpenAI
 
-from browser_use import BrowserConfig
+from browser_use import BrowserConfig, Agent, Browser
 from browser_use import BrowserContextConfig
+
 
 from supatest import SupatestAgent
 from supatest import SupatestBrowser
@@ -54,10 +55,22 @@ llm = AzureChatOpenAI(
 # TASK = """
 # Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
 # """
-TASK = """
-Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
+# TASK = """
+# Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
 # TASK = """
 # Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
+# """
+
+TASK = """
+Go to https://blazedemo.com/index.php and select Boston for departure and London for destination. Then click on Find Flights. Select the first flight and click on Choose This Flight. Then on the next page, scroll down by some amount and just do nothing. Do nothing after that.
+"""
+
+# TASK = """
+# Go to https://blazedemo.com/index.php and get dropdown options for departure city and destination city. Just do nothing after that.
+# """
+
+# TASK = """
+# Open a new tab and go to https://www.coursera.org/ and then scroll down by some amount. Don't do anything else.
 # """
 
 

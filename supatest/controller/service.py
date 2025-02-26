@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Dict, Generic, Optional, Type, TypeVar, Union
+from typing import Dict, Generic, Optional, Type, TypeVar, Union, Callable
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import PromptTemplate
@@ -12,7 +12,7 @@ from browser_use.controller.service import Controller
 from browser_use.utils import time_execution_sync
 
 from supatest.browser.context import SupatestBrowserContext
-from supatest.controller.registry.service import Registry
+from supatest.controller.registry.service import SupatestRegistry
 from supatest.controller.views import (
     ClickElementAction,
     DoneAction,
@@ -42,7 +42,7 @@ class SupatestController(Controller[Context]):
         output_model: Optional[Type[BaseModel]] = None,
     ):
         # Initialize with our custom Registry instead of the base one
-        self.registry = Registry[Context](exclude_actions)
+        self.registry = SupatestRegistry[Context](exclude_actions)
 
         """Register all default browser actions with supatest support"""
 
@@ -64,7 +64,7 @@ class SupatestController(Controller[Context]):
                 param_model=DoneAction,
             )
             async def done(params: DoneAction):
-                return ActionResult(is_done=True, success=True, extracted_content=params.text)
+                return ActionResult(is_done=True, success=params.success, extracted_content=params.text)
 
         @self.registry.action('Navigate to URL in the current tab', param_model=GoToUrlAction)
         async def go_to_url(params: GoToUrlAction, browser: SupatestBrowserContext):
@@ -196,9 +196,9 @@ class SupatestController(Controller[Context]):
             import markdownify
 
             content = markdownify.markdownify(await page.content())
-            prompt = 'Extract content from page based on goal: {goal}, Page: {page}'
+
+            prompt = 'Your task is to extract the content of the page. You will be given a page and a goal and you should extract all relevant information around this goal from the page. If the goal is vague, summarize the page. Respond in json format. Extraction goal: {goal}, Page: {page}'
             template = PromptTemplate(input_variables=['goal', 'page'], template=prompt)
-            
             try:
                 output = page_extraction_llm.invoke(template.format(goal=params.value, page=content))
                 msg = f'📄  Extracted from page\n: {output.content}\n'
@@ -255,28 +255,22 @@ class SupatestController(Controller[Context]):
             msg = f'⌨️  Sent keys: {params.keys}'
             logger.info(msg)
             return ActionResult(extracted_content=msg, include_in_memory=True)
-
-        @self.registry.action('Get dropdown options', param_model=GetDropdownOptionsAction)
-        async def get_dropdown_options(params: GetDropdownOptionsAction, browser: SupatestBrowserContext):
-            # Try to find element by supatest_locator_id first if provided
-            element_node = None
-            if params.supatest_locator_id:
-                state = await browser.get_state()
-                for node in state.selector_map.values():
-                    if node.supatest_locator_id == params.supatest_locator_id:
-                        element_node = node
-                        break
-
-            # Fall back to index if no element found by supatest_locator_id
-            if element_node is None:
-                if params.index not in await browser.get_selector_map():
-                    raise Exception(f'Element with index {params.index} does not exist')
-                element_node = await browser.get_dom_element_by_index(params.index)
-
+        
+        @self.registry.action(
+            description='Get all options from a native dropdown',
+            param_model=GetDropdownOptionsAction,
+        )
+        async def get_dropdown_options(params: GetDropdownOptionsAction, browser: SupatestBrowserContext) -> ActionResult:
+            """Get all options from a native dropdown"""
             page = await browser.get_current_page()
+            selector_map = await browser.get_selector_map()
+            dom_element = selector_map[params.index]
 
             try:
+                # Frame-aware approach since we know it works
+                all_options = []
                 frame_index = 0
+
                 for frame in page.frames:
                     try:
                         options = await frame.evaluate(
@@ -288,7 +282,7 @@ class SupatestController(Controller[Context]):
 
                                 return {
                                     options: Array.from(select.options).map(opt => ({
-                                        text: opt.text,
+                                        text: opt.text, //do not trim, because we are doing exact match in select_dropdown_option
                                         value: opt.value,
                                         index: opt.index
                                     })),
@@ -296,66 +290,76 @@ class SupatestController(Controller[Context]):
                                     name: select.name
                                 };
                             }
-                            """,
-                            element_node.xpath,
+                        """,
+                            dom_element.xpath,
                         )
 
                         if options:
                             logger.debug(f'Found dropdown in frame {frame_index}')
+                            logger.debug(f'Dropdown ID: {options["id"]}, Name: {options["name"]}')
+
                             formatted_options = []
                             for opt in options['options']:
+                                # encoding ensures AI uses the exact string in select_dropdown_option
                                 encoded_text = json.dumps(opt['text'])
                                 formatted_options.append(f'{opt["index"]}: text={encoded_text}')
 
-                            msg = '\n'.join(formatted_options)
-                            msg += '\nUse the exact text string in select_dropdown_option'
-                            logger.info(msg)
-                            return ActionResult(extracted_content=msg, include_in_memory=True)
+                            all_options.extend(formatted_options)
 
                     except Exception as frame_e:
                         logger.debug(f'Frame {frame_index} evaluation failed: {str(frame_e)}')
 
                     frame_index += 1
 
-                msg = 'No options found in any frame for dropdown'
+                if all_options:
+                    msg = '\n'.join(all_options)
+                    msg += '\nUse the exact text string in select_dropdown_option'
+                    logger.info(msg)
+                    return ActionResult(extracted_content=msg, include_in_memory=True)
+                else:
+                    msg = 'No options found in any frame for dropdown'
+                    logger.info(msg)
+                    return ActionResult(extracted_content=msg, include_in_memory=True)
+
+            except Exception as e:
+                logger.error(f'Failed to get dropdown options: {str(e)}')
+                msg = f'Error getting options: {str(e)}'
                 logger.info(msg)
                 return ActionResult(extracted_content=msg, include_in_memory=True)
 
-            except Exception as e:
-                msg = f'Error getting options: {str(e)}'
-                logger.error(msg)
-                return ActionResult(extracted_content=msg, include_in_memory=True)
-
-        @self.registry.action('Select dropdown option', param_model=SelectDropdownOptionAction)
-        async def select_dropdown_option(params: SelectDropdownOptionAction, browser: SupatestBrowserContext):
-            # Try to find element by supatest_locator_id first if provided
-            element_node = None
-            if params.supatest_locator_id:
-                state = await browser.get_state()
-                for node in state.selector_map.values():
-                    if node.supatest_locator_id == params.supatest_locator_id:
-                        element_node = node
-                        break
-
-            # Fall back to index if no element found by supatest_locator_id
-            if element_node is None:
-                if params.index not in await browser.get_selector_map():
-                    raise Exception(f'Element with index {params.index} does not exist')
-                element_node = await browser.get_dom_element_by_index(params.index)
-
-            if element_node.tag_name != 'select':
-                msg = f'Cannot select option: Element is a {element_node.tag_name}, not a select'
-                logger.error(msg)
-                return ActionResult(extracted_content=msg, include_in_memory=True)
-
+        @self.registry.action(
+            description='Select dropdown option for interactive element index by the text of the option you want to select',
+            param_model=SelectDropdownOptionAction,
+        )
+        async def select_dropdown_option(
+            params: SelectDropdownOptionAction,
+            browser: SupatestBrowserContext,
+        ) -> ActionResult:
+            """Select dropdown option by the text of the option you want to select"""
             page = await browser.get_current_page()
+            selector_map = await browser.get_selector_map()
+            dom_element = selector_map[params.index]
+
+            # Validate that we're working with a select element
+            if dom_element.tag_name != 'select':
+                logger.error(f'Element is not a select! Tag: {dom_element.tag_name}, Attributes: {dom_element.attributes}')
+                msg = f'Cannot select option: Element with index {params.index} is a {dom_element.tag_name}, not a select'
+                return ActionResult(extracted_content=msg, include_in_memory=True)
+
+            logger.debug(f"Attempting to select '{params.text}' using xpath: {dom_element.xpath}")
+            logger.debug(f'Element attributes: {dom_element.attributes}')
+            logger.debug(f'Element tag: {dom_element.tag_name}')
+
+            xpath = '//' + dom_element.xpath
 
             try:
                 frame_index = 0
                 for frame in page.frames:
                     try:
-                        dropdown_info = await frame.evaluate(
-                            """
+                        logger.debug(f'Trying frame {frame_index} URL: {frame.url}')
+
+                        # First verify we can find the dropdown in this frame
+                        find_dropdown_js = """
                             (xpath) => {
                                 try {
                                     const select = document.evaluate(xpath, document, null,
@@ -374,15 +378,15 @@ class SupatestController(Controller[Context]):
                                         tagName: select.tagName,
                                         optionCount: select.options.length,
                                         currentValue: select.value,
-                                        availableOptions: Array.from(select.options).map(o => o.text)
+                                        availableOptions: Array.from(select.options).map(o => o.text.trim())
                                     };
                                 } catch (e) {
                                     return {error: e.toString(), found: false};
                                 }
                             }
-                            """,
-                            element_node.xpath,
-                        )
+                        """
+
+                        dropdown_info = await frame.evaluate(find_dropdown_js, dom_element.xpath)
 
                         if dropdown_info:
                             if not dropdown_info.get('found'):
@@ -391,19 +395,22 @@ class SupatestController(Controller[Context]):
 
                             logger.debug(f'Found dropdown in frame {frame_index}: {dropdown_info}')
 
-                            selected_option_values = await frame.locator('//' + element_node.xpath).nth(0).select_option(
-                                label=params.text,
-                                timeout=1000
+                            # "label" because we are selecting by text
+                            # nth(0) to disable error thrown by strict mode
+                            # timeout=1000 because we are already waiting for all network events, therefore ideally we don't need to wait a lot here (default 30s)
+                            selected_option_values = (
+                                await frame.locator('//' + dom_element.xpath).nth(0).select_option(label=params.text, timeout=1000)
                             )
 
-                            msg = f'Selected option {params.text} with value {selected_option_values}'
-                            if params.supatest_locator_id:
-                                msg += f' (supatest_id: {params.supatest_locator_id})'
-                            logger.info(msg)
+                            msg = f'selected option {params.text} with value {selected_option_values}'
+                            logger.info(msg + f' in frame {frame_index}')
+
                             return ActionResult(extracted_content=msg, include_in_memory=True)
 
                     except Exception as frame_e:
                         logger.error(f'Frame {frame_index} attempt failed: {str(frame_e)}')
+                        logger.error(f'Frame type: {type(frame)}')
+                        logger.error(f'Frame URL: {frame.url}')
 
                     frame_index += 1
 
@@ -416,6 +423,8 @@ class SupatestController(Controller[Context]):
                 logger.error(msg)
                 return ActionResult(error=msg, include_in_memory=True)
 
+
+      
     @time_execution_sync('--act')
     async def act(
         self,
@@ -428,11 +437,22 @@ class SupatestController(Controller[Context]):
     ) -> ActionResult:
         """Execute an action with supatest support"""
         try:
-            # Handle both old and new action formats
+            # Standard action processing
             if hasattr(action, 'action'):
                 # New supatest format
-                for action_name, params in action.action.items():
+                action_data = action.action
+                for action_name, params in action_data.items():
                     if params is not None:
+                        # Uncomment if you want to use Laminar
+                        # with Laminar.start_as_current_span(
+                        #     name=action_name,
+                        #     input={
+                        #         'action': action_name,
+                        #         'params': params,
+                        #         'title': action.title if hasattr(action, 'title') else None
+                        #     },
+                        #     span_type='TOOL',
+                        # ):
                         result = await self.registry.execute_action(
                             action_name,
                             params,
@@ -442,6 +462,10 @@ class SupatestController(Controller[Context]):
                             available_file_paths=available_file_paths,
                             context=context,
                         )
+                            
+                        # Uncomment if you want to use Laminar
+                        # Laminar.set_span_output(result)
+                        
                         return self._process_result(result)
             else:
                 # Original browser_use format
@@ -461,7 +485,7 @@ class SupatestController(Controller[Context]):
         except Exception as e:
             raise e
 
-    def _process_result(self, result: Union[str, ActionResult, None]) -> ActionResult:
+    def _process_result(self, result):
         """Process the result of an action execution"""
         if isinstance(result, str):
             return ActionResult(extracted_content=result)
