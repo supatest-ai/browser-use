@@ -33,14 +33,17 @@ class SupatestAgentOutput(AgentOutput):
     )
 
     @staticmethod
-    def type_with_custom_actions(custom_actions: Type[SupatestActionModel]) -> Type['AgentOutput']:
+    def type_with_custom_actions(custom_actions: Type[SupatestActionModel]) -> Type['SupatestAgentOutput']:
         """Extend actions with custom actions"""
         return create_model(
-            'AgentOutput',
+            'SupatestAgentOutput',
             __base__=SupatestAgentOutput,
             action=(list[custom_actions], Field(...)),  # Properly annotated field with no default
             __module__=SupatestAgentOutput.__module__,
         )
+    
+    def __str__(self) -> str:
+        return f"SupatestAgentOutput(current_state={self.current_state}, action={self.action})"
 
 
 class SupatestAgentHistory(AgentHistory):

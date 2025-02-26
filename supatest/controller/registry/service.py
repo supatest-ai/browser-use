@@ -120,3 +120,7 @@ class SupatestRegistry(Registry[Context]):
 
         except Exception as e:
             raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e 
+        
+    def get_prompt_description(self) -> str:
+        """Get a description of all actions for the prompt in supatest format"""
+        return self.registry.get_prompt_description()
