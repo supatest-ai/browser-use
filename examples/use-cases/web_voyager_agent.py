@@ -70,7 +70,7 @@ Go to https://blazedemo.com/index.php and get all dropdown options for departure
 """
 
 # TASK = """
-# Browse coursera using https://www.coursera.org/ and then scroll down by one page and then scroll up by 500. Then do nothing.
+# Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Then do nothing.
 # """
 
 async def main():
