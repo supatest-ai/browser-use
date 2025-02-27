@@ -37,7 +37,7 @@ browser = SupatestBrowser(
 			maximum_wait_page_load_time=10,  # 20 on prod
 			# no_viewport=True,
 			browser_window_size={
-				'width': 1280,
+				'width': 620,
 				'height': 1100,
 			},
 			# trace_path='./tmp/web_voyager_agent',

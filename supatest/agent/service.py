@@ -7,9 +7,10 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar, Sequence
 
-from browser_use.agent.message_manager.utils import extract_json_from_model_output
+from browser_use.agent.gif import create_history_gif
+from browser_use.agent.message_manager.utils import extract_json_from_model_output, save_conversation
 from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -26,12 +27,14 @@ from langchain_core.messages import BaseMessage
 
 from browser_use.agent.service import Agent
 from browser_use.agent.views import ActionResult
-from browser_use.telemetry.views import AgentStepTelemetryEvent
-from browser_use.agent.views import AgentStepInfo, StepMetadata
+from browser_use.telemetry.views import AgentEndTelemetryEvent, AgentStepTelemetryEvent
+from browser_use.agent.views import AgentStepInfo, StepMetadata, AgentHistoryList
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
 
 from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain, SupatestAgentHistoryList
+from supatest.controller.registry.views import SupatestActionModel
+
 from supatest.browser.browser import SupatestBrowser
 from supatest.browser.context import SupatestBrowserContext
 from supatest.browser.views import SupatestBrowserState
@@ -113,9 +116,17 @@ class SupatestAgent(Agent[Context]):
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
+        # print("-----ActionModel-----")
+        # print(self.ActionModel.schema())
+        # print("-----ActionModel-----")
         self.AgentOutput = SupatestAgentOutput.type_with_custom_actions(self.ActionModel)
+        # print("-----AgentOutput-----")
+        # print(self.AgentOutput.schema())
+        # print("-----AgentOutput-----")
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'])
+ 
         self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
+      
 
     async def get_next_action(self, input_messages: list[BaseMessage]) -> SupatestAgentOutput:
         """Get next action from LLM based on current state"""
@@ -247,14 +258,37 @@ class SupatestAgent(Agent[Context]):
 
             self._message_manager.add_state_message(state, self.state.last_result, step_info, self.settings.use_vision)
 
+            # Run planner at specified intervals if planner is configured
+            if self.settings.planner_llm and self.state.n_steps % self.settings.planner_interval == 0:
+                plan = await self._run_planner()
+                self._message_manager.add_plan(plan, position=-1)
+
+            if step_info and step_info.is_last_step():
+                # Add last step warning if needed
+                msg = 'Now comes your last step. Use only the "done" action now. No other actions - so here your action sequence musst have length 1.'
+                msg += '\nIf the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed.'
+                msg += '\nIf the task is fully finished, set success in "done" to true.'
+                msg += '\nInclude everything you found out for the ultimate task in the done text.'
+                logger.info('Last step finishing up')
+                self._message_manager._add_message_with_tokens(HumanMessage(content=msg))
+                self.AgentOutput = self.DoneAgentOutput
+
+            input_messages = self._message_manager.get_messages()
+            tokens = self._message_manager.state.history.current_tokens
+
             try:
-                model_output = await self.get_next_action(self._message_manager.get_messages())
+                model_output = await self.get_next_action(input_messages)
                 await self._log_response(model_output)
 
                 if self.register_new_step_callback:
                     await self.register_new_step_callback(state, model_output, self.state.n_steps)
 
+                if self.settings.save_conversation_path:
+                    target = self.settings.save_conversation_path + f'_{self.state.n_steps}.txt'
+                    save_conversation(input_messages, model_output, target, self.settings.save_conversation_path_encoding)
+
                 self._message_manager._remove_last_state_message()
+                await self._raise_if_stopped_or_paused()
                 self._message_manager.add_model_output(model_output)
 
             except Exception as e:
@@ -308,13 +342,17 @@ class SupatestAgent(Agent[Context]):
                 )
             )
 
-            if state and model_output and result:
+            if not result:
+                return
+
+            if state:
                 metadata = StepMetadata(
                     step_number=self.state.n_steps,
                     step_start_time=step_start_time,
                     step_end_time=step_end_time,
                     input_tokens=tokens,
                 )
+    
                 self._make_history_item(model_output, state, result, metadata)
 
     async def run(self, max_steps: int = 100) -> SupatestAgentHistoryList:
@@ -327,7 +365,8 @@ class SupatestAgent(Agent[Context]):
                 self.state.last_result = result
 
             for step in range(max_steps):
-                if await self._too_many_failures():
+                if self.state.consecutive_failures >= self.settings.max_failures:
+                    logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
                     break
 
                 if self.state.stopped:
@@ -345,10 +384,7 @@ class SupatestAgent(Agent[Context]):
                 if self.state.history.is_done():
                     if self.settings.validate_output and step < max_steps - 1:
                         if not await self._validate_output():
-                            continue
-
-                    logger.info('✅ Task completed successfully')
-                    
+                            continue                    
                     try:
                         if self.send_message:
                             await self._send_message("AGENT_GOAL_STOP_RES", {
@@ -360,8 +396,8 @@ class SupatestAgent(Agent[Context]):
                     except Exception as e:
                         logger.warning(f"Failed to send goal stop message: {str(e)}")
                         
-                    if self.register_done_callback:
-                        await self.register_done_callback(self.state.history)
+                  
+                    await self.log_completion()
                     break
             else:
                 logger.info('❌ Failed to complete task in maximum steps')
@@ -376,10 +412,24 @@ class SupatestAgent(Agent[Context]):
             return self.state.history
 
         finally:
-            await self._cleanup()
+            await self._cleanup(max_steps)
 
-    async def _cleanup(self) -> None:
+    async def _cleanup(self, max_steps: int) -> None:
         """Cleanup resources and generate final artifacts"""
+        logger.info('🔄 Cleaning up...')
+        self.telemetry.capture(
+				AgentEndTelemetryEvent(
+					agent_id=self.state.agent_id,
+					is_done=self.state.history.is_done(),
+					success=self.state.history.is_successful(),
+					steps=self.state.n_steps,
+					max_steps_reached=self.state.n_steps >= max_steps,
+					errors=self.state.history.errors(),
+					total_input_tokens=self.state.history.total_input_tokens(),
+					total_duration_seconds=self.state.history.total_duration_seconds(),
+				)
+			)
+        
         if not self.injected_browser_context:
             await self.browser_context.close()
 
@@ -391,3 +441,49 @@ class SupatestAgent(Agent[Context]):
             if isinstance(self.settings.generate_gif, str):
                 output_path = self.settings.generate_gif
             create_history_gif(task=self.task, history=self.state.history, output_path=output_path) 
+
+    async def multi_act(
+        self,
+        actions: Sequence[SupatestActionModel],
+        check_for_new_elements: bool = True,
+    ) -> list[ActionResult]:
+        """Execute multiple actions with SupatestActionModel type"""
+        results = []
+
+        cached_selector_map = await self.browser_context.get_selector_map()
+        cached_path_hashes = set(e.hash.branch_path_hash for e in cached_selector_map.values())
+
+        await self.browser_context.remove_highlights()
+
+        for i, action in enumerate(actions):
+            if action.get_index() is not None and i != 0:
+                new_state = await self.browser_context.get_state()
+                new_path_hashes = set(e.hash.branch_path_hash for e in new_state.selector_map.values())
+                if check_for_new_elements and not new_path_hashes.issubset(cached_path_hashes):
+                    # next action requires index but there are new elements on the page
+                    msg = f'Something new appeared after action {i} / {len(actions)}'
+                    logger.info(msg)
+                    results.append(ActionResult(extracted_content=msg, include_in_memory=True))
+                    break
+
+            await self._raise_if_stopped_or_paused()
+
+            result = await self.controller.act(
+                action,
+                self.browser_context,
+                self.settings.page_extraction_llm,
+                self.sensitive_data,
+                self.settings.available_file_paths,
+                context=self.context,
+            )
+
+            results.append(result)
+
+            logger.debug(f'Executed action {i + 1} / {len(actions)}')
+            if results[-1].is_done or results[-1].error or i == len(actions) - 1:
+                break
+
+            await asyncio.sleep(self.browser_context.config.wait_between_actions)
+            # hash all elements. if it is a subset of cached_state its fine - else break (new elements on page)
+
+        return results 

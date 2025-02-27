@@ -62,8 +62,17 @@ class SupatestAgentHistoryList(AgentHistoryList):
     def model_thoughts(self) -> list[SupatestAgentBrain]:
         """Get all thoughts from history"""
         return [h.model_output.current_state for h in self.history if h.model_output]
+    
+    def model_outputs(self) -> list[SupatestAgentOutput]:
+        """Get all model outputs from history"""
+        return [h.model_output for h in self.history if h.model_output]
 
-
+    def is_done(self) -> bool:
+        """Check if the agent is done"""
+        if self.history and len(self.history[-1].result) > 0:
+            last_result = self.history[-1].result[-1]
+            return last_result.is_done is True
+        return False
 # Re-export other classes that we're not modifying
 __all__ = [
     'SupatestAgentBrain',
