@@ -45,6 +45,7 @@ class SupatestAgent(Agent[Context]):
     """Extended Agent class with custom implementations"""
 
     browser_context: SupatestBrowserContext
+    controller: SupatestController[Context]
 
     def __init__(
         self,
@@ -68,22 +69,6 @@ class SupatestAgent(Agent[Context]):
         # This ensures our custom actions are used throughout initialization
         controller_registry = controller.registry
         available_actions = controller_registry.get_prompt_description()
-        
-        # Create an explicit list of available actions to extend the system prompt
-        available_action_names = list(controller_registry.registry.actions.keys())
-        explicit_actions_list = f"\n\nIMPORTANT: You MUST ONLY use the following actions: {', '.join(available_action_names)}.\n"
-        explicit_actions_list += "DO NOT use any actions not listed above, especially do not use 'input_select'.\n"
-        explicit_actions_list += "For dropdown selection, use 'select_dropdown_option' with parameters 'index' and 'text'.\n"
-        # Add specific instructions for scroll actions
-        if 'scroll_down' in available_action_names or 'scroll_up' in available_action_names:
-            explicit_actions_list += "\nFor scrolling actions, ALWAYS use the 'amount' parameter (not 'pixels') if you want to scroll a specific amount otherwise use 'scroll_down' or 'scroll_up' without amount. Example: {\"scroll_down\": {\"amount\": 500}}\n"
-    
-        
-        # Extend the system message with our explicit actions list
-        if 'extend_system_message' in kwargs:
-            kwargs['extend_system_message'] += explicit_actions_list
-        else:
-            kwargs['extend_system_message'] = explicit_actions_list
         
         super().__init__(
             task=task,
@@ -124,22 +109,11 @@ class SupatestAgent(Agent[Context]):
             ),
             state=self.state.message_manager_state,
         )
-        
-        # Log the system prompt to verify action descriptions are included
-        logger.debug(f"Initialized SupatestAgent with custom action descriptions. Available actions: {self.available_actions}")
-        # Log the full system message to see exactly what's being sent to the agent
-        messages = self._message_manager.get_messages()
-        logger.debug(f"Full system message: {messages}")
-
-        self._setup_action_models()
-
-
+ 
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
-        # Create output model with the dynamic actions and our extended AgentBrain
         self.AgentOutput = SupatestAgentOutput.type_with_custom_actions(self.ActionModel)
-        # Create done action model for final step
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'])
         self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
 

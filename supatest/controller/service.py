@@ -23,7 +23,6 @@ from supatest.controller.views import (
     ScrollAction,
     SendKeysAction,
     SwitchTabAction,
-    ExtractPageContentAction,
     SelectDropdownOptionAction,
     GetDropdownOptionsAction,
 )
