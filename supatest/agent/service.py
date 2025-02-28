@@ -116,15 +116,8 @@ class SupatestAgent(Agent[Context]):
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
-        # print("-----ActionModel-----")
-        # print(self.ActionModel.schema())
-        # print("-----ActionModel-----")
         self.AgentOutput = SupatestAgentOutput.type_with_custom_actions(self.ActionModel)
-        # print("-----AgentOutput-----")
-        # print(self.AgentOutput.schema())
-        # print("-----AgentOutput-----")
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'])
- 
         self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
       
 
@@ -417,30 +410,20 @@ class SupatestAgent(Agent[Context]):
     async def _cleanup(self, max_steps: int) -> None:
         """Cleanup resources and generate final artifacts"""
         logger.info('🔄 Cleaning up...')
-        self.telemetry.capture(
-				AgentEndTelemetryEvent(
-					agent_id=self.state.agent_id,
-					is_done=self.state.history.is_done(),
-					success=self.state.history.is_successful(),
-					steps=self.state.n_steps,
-					max_steps_reached=self.state.n_steps >= max_steps,
-					errors=self.state.history.errors(),
-					total_input_tokens=self.state.history.total_input_tokens(),
-					total_duration_seconds=self.state.history.total_duration_seconds(),
-				)
-			)
-        
-        if not self.injected_browser_context:
-            await self.browser_context.close()
+        # Remove highlights before closing the browser context
+        await self.browser_context.remove_highlights()
 
-        if not self.injected_browser and self.browser:
-            await self.browser.close()
-
-        if self.settings.generate_gif:
-            output_path = 'agent_history.gif'
-            if isinstance(self.settings.generate_gif, str):
-                output_path = self.settings.generate_gif
-            create_history_gif(task=self.task, history=self.state.history, output_path=output_path) 
+    async def stop(self) -> None:
+        """Stop the agent"""
+        logger.info('⏹️ Supatest Agent stopping')
+        self.state.stopped = True
+        if self.send_message:
+            await self._send_message("AGENT_GOAL_STOP_RES", {
+                "requestId": self.requestId,
+                "testCaseId": self.testCaseId,
+                "success": True,
+                "error": None,
+            })
 
     async def multi_act(
         self,
