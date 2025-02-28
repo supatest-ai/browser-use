@@ -51,30 +51,14 @@ class SupatestRegistry(Registry[Context]):
     
     def create_action_model(self,include_actions: Optional[list[str]] = None) -> Type[SupatestActionModel]:
         """Creates a Pydantic model from registered actions with supatest format"""
-        # Base fields for the SupatestActionModel structure
         fields = {
-            'title': (str, Field(description="Human readable description of what this action does")),
-            'action': (
-                dict,
-                Field(
-                    description="The actual action to be executed",
-                    default_factory=dict
-                )
-            )
-        }
-        
-        # Add fields for each registered action - this is crucial for structured output and function calling
-        action_fields = {
-            name: (
-                Optional[action.param_model],
-                Field(default=None, description=action.description),
-            )
-            for name, action in self.registry.actions.items()
-            if include_actions is None or name in include_actions
-        }
-        
-        # Merge the fields - both our custom structure and the action fields
-        fields.update(action_fields)
+			name: (
+				Optional[action.param_model],
+				Field(default=None, description=action.description),
+			)
+			for name, action in self.registry.actions.items()
+			if include_actions is None or name in include_actions
+		}
 
         self.telemetry.capture(
             ControllerRegisteredFunctionsTelemetryEvent(

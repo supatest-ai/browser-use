@@ -31,11 +31,10 @@ Interactive Elements
      }},
    "action": [
    {{
-   "title": "Human readable description of what this action does",
-   "action": {{
    "one_action_name": {{
    // action-specific parameter
-   }}
+   "title": "Title for this action describing what this action is doing"
+   ... other action_name specific data
    }}
    }},
    // ... more actions in sequence
@@ -43,9 +42,10 @@ Interactive Elements
    }}
 
 2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {{max_actions}} actions per sequence.
+   Every action MUST include a "title" field that describes what the action does.
    Common action sequences:
 
-- Form filling: [{{"input_text": {{"index": 1, "text": "username"}}}}, {{"input_text": {{"index": 2, "text": "password"}}}}, {{"click_element": {{"index": 3}}}}]
+- Form filling: [{{"input_text": {{"index": 1, "text": "username", "title": "Enter username"}}}}, {{"input_text": {{"index": 2, "text": "password", "title": "Enter password"}}}}, {{"click_element": {{"index": 3, "title": "Click login button"}}}}]
 - Navigation and extraction: [{{"go_to_url": {{"url": "https://example.com"}}}}, {{"extract_content": {{"goal": "extract the names"}}}}]
 - Actions are executed in the given order
 - If the page changes after an action, the sequence is interrupted and you get the new state.
