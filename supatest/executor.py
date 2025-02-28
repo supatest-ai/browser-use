@@ -10,7 +10,6 @@ from browser_use.browser.browser import BrowserConfig
 
 from supatest.agent.service import SupatestAgent
 from supatest.browser.browser import SupatestBrowser
-from supatest.browser.context import SupatestBrowserContext
 
 logger = logging.getLogger("py_ws_server")
 
@@ -99,9 +98,8 @@ class Executor:
                     cdp_url=connection_url,
                 )
             )
-            browser_context = SupatestBrowserContext(browser=browser)
-
-            # Configure the language model
+            
+            # Initialize agent with modified AzureChatOpenAI settings
             model = AzureChatOpenAI(
                 model="gpt-4o",
                 api_version="2024-10-21",
@@ -119,7 +117,6 @@ class Executor:
                 task=task,
                 llm=model,
                 browser=browser,
-                browser_context=browser_context,
                 send_message=send_message,
                 goal_step_id=goal_id,
                 requestId=requestId,

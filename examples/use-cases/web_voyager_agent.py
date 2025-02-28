@@ -44,7 +44,6 @@ browser = SupatestBrowser(
 		),
 	)
 )
-browser_context = SupatestBrowserContext(browser=browser)
 llm = AzureChatOpenAI(
 	model='gpt-4o',
 	api_version='2024-10-21',
@@ -57,9 +56,9 @@ llm = AzureChatOpenAI(
 # """
 # TASK = """
 # Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
-TASK = """
-Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
-"""
+# TASK = """
+# Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
+# """
 
 # TASK = """
 # Go to https://blazedemo.com/index.php and select Boston for departure and London for destination. Then click on Find Flights. Select the first flight and click on Choose This Flight. Then on the next page, scroll down by some amount and just do nothing. Do nothing after that.
@@ -69,16 +68,15 @@ Find and book a hotel in Paris with suitable accommodations for a family of four
 # Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
 # """
 
-# TASK = """
-# Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Then do nothing.
-# """
+TASK = """
+Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Then do nothing.
+"""
 
 async def main():
 	agent = SupatestAgent(
 		task=TASK,
 		llm=llm,
 		browser=browser,
-		browser_context=browser_context,
 	)
 	history = await agent.run(max_steps=50)
 	history.save_to_file('./tmp/history.json')

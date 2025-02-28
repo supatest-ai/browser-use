@@ -73,6 +73,16 @@ class SupatestAgent(Agent[Context]):
         controller_registry = controller.registry
         available_actions = controller_registry.get_prompt_description()
         
+        # Handle browser and browser_context setup before calling super().__init__
+        self.injected_browser = browser is not None
+        self.injected_browser_context = browser_context is not None
+        
+        # If only browser is provided, create a SupatestBrowserContext
+        if browser and not browser_context:
+            browser_context = SupatestBrowserContext(browser=browser, config=browser.config.new_context_config)
+            # We created the browser_context, so we should close it
+            self.injected_browser_context = False
+        
         super().__init__(
             task=task,
             llm=llm,
@@ -409,7 +419,7 @@ class SupatestAgent(Agent[Context]):
 
     async def _cleanup(self, max_steps: int) -> None:
         """Cleanup resources and generate final artifacts"""
-        logger.info('🔄 Cleaning up...')
+        logger.debug('🔄 Cleaning up...')
         # Remove highlights before closing the browser context
         await self.browser_context.remove_highlights()
 
