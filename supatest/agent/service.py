@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 import asyncio
+import importlib.resources
 import json
 import logging
 import re
@@ -83,6 +84,18 @@ class SupatestAgent(Agent[Context]):
             # We created the browser_context, so we should close it
             self.injected_browser_context = False
         
+        # Load our custom system prompt if not already overridden
+        if 'override_system_message' not in kwargs:
+            try:
+                # Load the custom system prompt from the Supatest package
+                with importlib.resources.files('supatest.agent').joinpath('system_prompt.md').open('r') as f:
+                    custom_system_prompt = f.read()
+                max_actions = kwargs.get('max_actions_per_step', 10)
+                custom_system_prompt = custom_system_prompt.format(max_actions=max_actions)
+                kwargs['override_system_message'] = custom_system_prompt
+            except Exception as e:
+                logger.warning(f"Failed to load custom system prompt: {e}")
+        
         super().__init__(
             task=task,
             llm=llm,
@@ -130,7 +143,6 @@ class SupatestAgent(Agent[Context]):
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'])
         self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
       
-
     async def get_next_action(self, input_messages: list[BaseMessage]) -> SupatestAgentOutput:
         """Get next action from LLM based on current state"""
         input_messages = self._convert_input_messages(input_messages)
