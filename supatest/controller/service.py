@@ -436,50 +436,21 @@ class SupatestController(Controller[Context]):
     ) -> ActionResult:
         """Execute an action with supatest support"""
         try:
-            # Standard action processing
-            if hasattr(action, 'action'):
-                # New supatest format
-                action_data = action.action
-                for action_name, params in action_data.items():
-                    if params is not None:
-                        # Uncomment if you want to use Laminar
-                        # with Laminar.start_as_current_span(
-                        #     name=action_name,
-                        #     input={
-                        #         'action': action_name,
-                        #         'params': params,
-                        #         'title': action.title if hasattr(action, 'title') else None
-                        #     },
-                        #     span_type='TOOL',
-                        # ):
-                        result = await self.registry.execute_action(
-                            action_name,
-                            params,
-                            browser=browser_context,
-                            page_extraction_llm=page_extraction_llm,
-                            sensitive_data=sensitive_data,
-                            available_file_paths=available_file_paths,
-                            context=context,
-                        )
-                            
-                        # Uncomment if you want to use Laminar
-                        # Laminar.set_span_output(result)
-                        
-                        return self._process_result(result)
-            else:
-                # Original browser_use format
-                for action_name, params in action.model_dump(exclude_unset=True).items():
-                    if params is not None:
-                        result = await self.registry.execute_action(
-                            action_name,
-                            params,
-                            browser=browser_context,
-                            page_extraction_llm=page_extraction_llm,
-                            sensitive_data=sensitive_data,
-                            available_file_paths=available_file_paths,
-                            context=context,
-                        )
-                        return self._process_result(result)
+            # Process action in the new non-nested format
+            action_data = action.model_dump(exclude_unset=True)
+            for action_name, params in action_data.items():
+                if params is not None:
+                    # Execute the action
+                    result = await self.registry.execute_action(
+                        action_name,
+                        params,
+                        browser=browser_context,
+                        page_extraction_llm=page_extraction_llm,
+                        sensitive_data=sensitive_data,
+                        available_file_paths=available_file_paths,
+                        context=context,
+                    )
+                    return self._process_result(result)
             return ActionResult()
         except Exception as e:
             raise e

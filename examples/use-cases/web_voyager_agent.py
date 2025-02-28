@@ -37,7 +37,7 @@ browser = SupatestBrowser(
 			maximum_wait_page_load_time=10,  # 20 on prod
 			# no_viewport=True,
 			browser_window_size={
-				'width': 620,
+				'width': 500,
 				'height': 1100,
 			},
 			# trace_path='./tmp/web_voyager_agent',
@@ -57,17 +57,17 @@ llm = AzureChatOpenAI(
 # """
 # TASK = """
 # Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
-# TASK = """
-# Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
-# """
+TASK = """
+Find and book a hotel in Paris with suitable accommodations for a family of four (two adults and two children) offering free cancellation for the dates of February 14-21, 2025. on https://www.booking.com/
+"""
 
 # TASK = """
 # Go to https://blazedemo.com/index.php and select Boston for departure and London for destination. Then click on Find Flights. Select the first flight and click on Choose This Flight. Then on the next page, scroll down by some amount and just do nothing. Do nothing after that.
 # """
 
-TASK = """
-Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
-"""
+# TASK = """
+# Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
+# """
 
 # TASK = """
 # Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Then do nothing.
