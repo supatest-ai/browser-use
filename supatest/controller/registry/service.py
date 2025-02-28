@@ -1,3 +1,4 @@
+from inspect import signature
 from typing import Any, Dict, Generic, Optional, Type, TypeVar
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -92,35 +93,70 @@ class SupatestRegistry(Registry[Context]):
             # Create the validated Pydantic model
             validated_params = action.param_model(**params)
 
-            # Add only required arguments based on action name
-            extra_args = {}
-            
-            # Only add browser for actions that need it (exclude 'done' action)
-            if browser and action_name != 'done':
-                extra_args['browser'] = browser
-            
-            # Only add page_extraction_llm for extract_content action
-            if action_name == 'extract_content' and page_extraction_llm:
-                extra_args['page_extraction_llm'] = page_extraction_llm
-            
-            # Only add available_file_paths for file-related actions
-            if action_name in ['upload_file', 'download_file'] and available_file_paths:
-                extra_args['available_file_paths'] = available_file_paths
-            
-            # Add context if provided and action accepts it
-            if context:
-                extra_args['context'] = context
+            # Check if the first parameter is a Pydantic model
+            sig = signature(action.function)
+            parameters = list(sig.parameters.values())
+            is_pydantic = parameters and issubclass(parameters[0].annotation, BaseModel)
+            parameter_names = [param.name for param in parameters]
 
-            # Add has_sensitive_data flag for input_text action
+            # Replace sensitive data if provided
+            if sensitive_data:
+                validated_params = self._replace_sensitive_data(validated_params, sensitive_data)
+
+            # Check if required parameters are provided
+            if 'browser' in parameter_names and not browser:
+                raise ValueError(f'Action {action_name} requires browser but none provided.')
+            if 'page_extraction_llm' in parameter_names and not page_extraction_llm:
+                raise ValueError(f'Action {action_name} requires page_extraction_llm but none provided.')
+            if 'available_file_paths' in parameter_names and not available_file_paths:
+                raise ValueError(f'Action {action_name} requires available_file_paths but none provided.')
+            if 'context' in parameter_names and not context:
+                raise ValueError(f'Action {action_name} requires context but none provided.')
+
+            # Prepare arguments based on parameter type
+            extra_args = {}
+            if 'context' in parameter_names:
+                extra_args['context'] = context
+            if 'browser' in parameter_names:
+                extra_args['browser'] = browser
+            if 'page_extraction_llm' in parameter_names:
+                extra_args['page_extraction_llm'] = page_extraction_llm
+            if 'available_file_paths' in parameter_names:
+                extra_args['available_file_paths'] = available_file_paths
             if action_name == 'input_text' and sensitive_data:
                 extra_args['has_sensitive_data'] = True
 
             # Execute the action with validated parameters
-            return await action.function(validated_params, **extra_args)
+            if is_pydantic:
+                return await action.function(validated_params, **extra_args)
+            return await action.function(**validated_params.model_dump(), **extra_args)
 
         except Exception as e:
-            raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e 
-        
+            raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e
+
+        """Replaces the sensitive data in the params"""
+        # if there are any str with <secret>placeholder</secret> in the params, replace them with the actual value from sensitive_data
+        import re
+
+        secret_pattern = re.compile(r'<secret>(.*?)</secret>')
+
+        def replace_secrets(value):
+            if isinstance(value, str):
+                matches = secret_pattern.findall(value)
+                for placeholder in matches:
+                    if placeholder in sensitive_data:
+                        value = value.replace(f'<secret>{placeholder}</secret>', sensitive_data[placeholder])
+                return value
+            elif isinstance(value, dict):
+                return {k: replace_secrets(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [replace_secrets(v) for v in value]
+            return value
+
+        for key, value in params.model_dump().items():
+            params.__dict__[key] = replace_secrets(value)
+        return params
+
     def get_prompt_description(self) -> str:
         """Get a description of all actions for the prompt in supatest format"""
         return self.registry.get_prompt_description()
