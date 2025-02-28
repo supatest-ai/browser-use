@@ -69,7 +69,7 @@ llm = AzureChatOpenAI(
 # """
 
 TASK = """
-Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Then do nothing.
+Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Scroll down by 1500 pixels and then up by 500 pixels. Then Go back to coursera homepage and switch to another tab and open coursera homepage again. Search 'full stack developer course' in search bar by pressing 'Enter'.
 """
 
 async def main():

@@ -7,6 +7,9 @@ class GoToUrlAction(BaseModel):
     url: str
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
 
+class GoBackAction(BaseModel):
+    title: Optional[str] = Field(None, description="Human readable description of what this action does")
+
 
 class ClickElementAction(BaseModel):
     index: int

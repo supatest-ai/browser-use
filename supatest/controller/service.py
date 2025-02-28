@@ -16,6 +16,7 @@ from supatest.controller.registry.service import SupatestRegistry
 from supatest.controller.views import (
     ClickElementAction,
     DoneAction,
+    GoBackAction,
     GoToUrlAction,
     InputTextAction,
     NoParamsAction,
@@ -74,8 +75,8 @@ class SupatestController(Controller[Context]):
             logger.info(msg)
             return ActionResult(extracted_content=msg, include_in_memory=True)
 
-        @self.registry.action('Go back', param_model=NoParamsAction)
-        async def go_back(_: NoParamsAction, browser: SupatestBrowserContext):
+        @self.registry.action('Go back', param_model=GoBackAction)
+        async def go_back(_: GoBackAction, browser: SupatestBrowserContext):
             await browser.go_back()
             msg = '🔙  Navigated back'
             logger.info(msg)
