@@ -21,24 +21,22 @@ Interactive Elements
 # Response Rules
 
 1. RESPONSE FORMAT: You must ALWAYS respond with valid JSON in this exact format:
-   {{"current_state": {{"evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Mention if something unexpected happened. Shortly state why/why not",
-   "memory": "Description of what has been done and what you need to remember. Be very specific. Count here ALWAYS how many times you have done something and how many remain. E.g. 0 out of 10 websites analyzed. Continue with abc and xyz",
-   "next_goal": "What needs to be done with the next immediate action"}},
-   "action":[{{"one_action_name": {{// action-specific parameter}}}}, // ... more actions in sequence]}}
+   {{
+     "current_state": {{
+       "page_summary": "Quick detailed summary of new information from the current page which is not yet in the task history memory. Be specific with details which are important for the task. This is not on the meta level, but should be facts. If all the information is already in the task history memory, leave this empty.",
+       "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not",
+       "memory": "Description of what has been done and what you need to remember. Be very specific. Count here ALWAYS how many times you have done something and how many remain. E.g. 0 out of 10 websites analyzed. Continue with abc and xyz",
+       "next_goal": "What needs to be done with the next actions",
+       "thought": "Think about the requirements that have been completed in previous operations and the requirements that need to be completed in the next one operation. If your output of prev_action_evaluation is 'Failed', please reflect and output your reflection here."
+       "action": [{{"one_action_name": {{// action-specific parameter, "title": "Title for this action describing what this action is doing"}}}}, // ... more actions in sequence]}},
+   }}
 
 2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {{max_actions}} actions per sequence.
+   Every action MUST include a "title" field that describes what the action does.
    Common action sequences:
 
-- Form filling: [{{"input_text": {{"index": 1, "text": "username"}}}}, {{"input_text": {{"index": 2, "text": "password"}}}}, {{"click_element": {{"index": 3}}}}]
-- Navigation and extraction: [{{"go_to_url": {{"url": "https://example.com"}}}}, {{"extract_content": {{"goal": "extract the names"}}}}]
-- Actions are executed in the given order
-- If the page changes after an action, the sequence is interrupted and you get the new state.
-- Only provide the action sequence until an action which changes the page state significantly.
-- Try to be efficient, e.g. fill forms at once, or chain actions where nothing changes on the page
-- only use multiple actions if it makes sense.
-
 - Form filling: [{{"input_text": {{"index": 1, "text": "username", "title": "Enter username"}}}}, {{"input_text": {{"index": 2, "text": "password", "title": "Enter password"}}}}, {{"click_element": {{"index": 3, "title": "Click login button"}}}}]
-- Navigation and extraction: [{{"go_to_url": {{"url": "https://example.com"}}}}, {{"extract_content": {{"goal": "extract the names"}}}}]
+- Navigation and extraction: [{{"go_to_url": {{"url": "https://example.com", "title": "Navigate to example.com"}}}}, {{"extract_content": {{"goal": "extract the names"}}}}]
 - Actions are executed in the given order
 - If the page changes after an action, the sequence is interrupted and you get the new state.
 - Only provide the action sequence until an action which changes the page state significantly.
