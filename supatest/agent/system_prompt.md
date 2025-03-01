@@ -42,7 +42,11 @@ Interactive Elements
        "action": [{{"one_action_name": {{// action-specific parameter, "title": "Title for this action describing what this action is doing"}}}}, // ... more actions in sequence]}},
    }}
 
-2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {{max_actions}} actions per sequence. Every action MUST include a "title" field that describes what the action does.
+2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {{max_actions}} actions per sequence.
+   Every action MUST include a "title" field that describes what the action does.
+   Each action model now includes an `isExecuted` field, which defaults to `false`. This indicates that the action has not yet been executed.
+   If the context receives `isExecuted` as `true`, it means that the action is currently being executed.
+
    Common action sequences:
 
 - Form filling: [{{"input_text": {{"index": 1, "text": "username", "title": "Enter username"}}}}, {{"input_text": {{"index": 2, "text": "password", "title": "Enter password"}}}}, {{"click_element": {{"index": 3, "title": "Click login button"}}}}]
