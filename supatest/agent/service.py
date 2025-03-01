@@ -204,7 +204,7 @@ class SupatestAgent(Agent[Context]):
         # Create steps array with all actions
         steps = []
         for i, action in enumerate(response.action):
-            step = json.loads(action.model_dump_json(exclude_unset=True))
+            step = action.model_dump(exclude_none=True)
             steps.append(step)
             logger.info(f'🛠️  Action {i + 1}/{len(response.action)}: {action.model_dump_json(exclude_unset=True)}')
 
@@ -280,7 +280,7 @@ class SupatestAgent(Agent[Context]):
 
             if step_info and step_info.is_last_step():
                 # Add last step warning if needed
-                msg = 'Now comes your last step. Use only the "done" action now. No other actions - so here your action sequence musst have length 1.'
+                msg = 'Now comes your last step. Use only the "done" action now. No other actions - so here your action sequence must have length 1.'
                 msg += '\nIf the task is not yet fully finished as requested by the user, set success in "done" to false! E.g. if not all steps are fully completed.'
                 msg += '\nIf the task is fully finished, set success in "done" to true.'
                 msg += '\nInclude everything you found out for the ultimate task in the done text.'
@@ -382,6 +382,13 @@ class SupatestAgent(Agent[Context]):
             for step in range(max_steps):
                 if self.state.consecutive_failures >= self.settings.max_failures:
                     logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
+                    await self._send_message("error", "The AI has encountered a policy violation.")
+                    await self._send_message("AGENT_GOAL_STOP_RES", {
+                        "requestId": self.requestId,
+                        "testCaseId": self.testCaseId,
+                        "success": False,
+                        "error": f"Stopping due to {self.settings.max_failures} consecutive failures",
+                    })
                     break
 
                 if self.state.stopped:
@@ -460,6 +467,12 @@ class SupatestAgent(Agent[Context]):
 
         await self.browser_context.remove_highlights()
 
+        # Create initial steps array
+        steps = []
+        for i, action in enumerate(actions):
+            step = action.model_dump(exclude_none=True)  
+            steps.append(step)
+
         for i, action in enumerate(actions):
             if action.get_index() is not None and i != 0:
                 new_state = await self.browser_context.get_state()
@@ -482,6 +495,13 @@ class SupatestAgent(Agent[Context]):
                 context=self.context,
             )
 
+
+            step = action.model_dump(exclude_none=True)  
+
+            
+            # Send update that the action has been executed with the result
+            # The key change: update the steps variable with the returned updated steps
+            steps = await self._send_action_update(step, True, steps)
             results.append(result)
 
             logger.debug(f'Executed action {i + 1} / {len(actions)}')
@@ -491,4 +511,50 @@ class SupatestAgent(Agent[Context]):
             await asyncio.sleep(self.browser_context.config.wait_between_actions)
             # hash all elements. if it is a subset of cached_state its fine - else break (new elements on page)
 
-        return results 
+        return results
+
+
+    async def _send_action_update(self, action, is_executed: bool, steps: list[dict]) -> list[dict]:
+        """
+        Send action execution status update via websocket
+
+        Args:
+            action: The action that was executed
+            is_executed: Whether the action was executed successfully
+            steps: List of all steps in the current sequence
+
+        Returns:
+            The updated steps list with execution status, flattened
+        """
+        if not self.send_message:
+            return steps  # Return original steps if no message sending
+
+        try:
+            # Update the isExecuted status of the corresponding step
+            for step in steps:
+                action_key = next(iter(step))  # Get the action type ('input_text', 'click_element', etc.)
+                
+                # Extract action details
+                action_details = action.get(action_key)  # Get the actual action dictionary
+                
+                if not action_details:
+                    continue  # Skip if there's no matching action type
+
+                if step[action_key]['id'] == action_details['id']:  # Match the action by ID
+                    step[action_key]['isExecuted'] = is_executed  # Update the isExecuted status
+                    break
+
+
+            simplified_steps = [list(step.values())[0] for step in steps]
+
+            # Send the updated steps via websocket
+            await self._send_message("AGENT_STEP_EXECUTED", {
+                "steps": simplified_steps
+            })
+
+            # Return the updated steps so they can be used for the next action
+            return steps
+
+        except Exception as e:
+            logger.warning(f"Failed to send action update: {str(e)}")
+            return steps  # Return original steps if there was an error
