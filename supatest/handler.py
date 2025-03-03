@@ -29,7 +29,7 @@ class Handler:
             await self.session_manager.remove_connection_environment(sid)
 
     async def emit_setup_error(self, sid: str, error: str):
-        await self.sio.emit("setup_error", {"error": error}, to=sid)
+        await self.sio.emit("setup_error", {"ERROR": error}, to=sid)
         await self.sio.disconnect(sid)
 
     async def emit_setup_success(self, sid: str, requestId: str):

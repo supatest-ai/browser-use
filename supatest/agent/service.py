@@ -321,7 +321,7 @@ class SupatestAgent(Agent[Context]):
                 error_str = str(e)
                 if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
                     if self.send_message:
-                        await self._send_message("error", "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines.")
+                        await self._send_message("ERROR", "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines.")
                 self.state.last_result = [ActionResult(error=error_str, include_in_memory=True)]
                 raise e
 
@@ -346,7 +346,7 @@ class SupatestAgent(Agent[Context]):
             
             if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
                 if self.send_message:
-                    await self._send_message("error", "The AI has encountered a policy violation.")
+                    await self._send_message("ERROR", "The AI has encountered a policy violation.")
                     await self._send_message("AGENT_GOAL_STOP_RES", {
                         "requestId": self.requestId,
                         "testCaseId": self.testCaseId,
@@ -392,7 +392,7 @@ class SupatestAgent(Agent[Context]):
             for step in range(max_steps):
                 if self.state.consecutive_failures >= self.settings.max_failures:
                     logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
-                    await self._send_message("error", "The AI has encountered a policy violation.")
+                    await self._send_message("ERROR", "The AI has encountered a policy violation.")
                     await self._send_message("AGENT_GOAL_STOP_RES", {
                         "requestId": self.requestId,
                         "testCaseId": self.testCaseId,
