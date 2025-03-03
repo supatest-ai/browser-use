@@ -9,6 +9,7 @@ from langchain_openai import AzureChatOpenAI
 from browser_use.browser.browser import BrowserConfig
 
 from supatest.agent.service import SupatestAgent
+from supatest.controller.service import SupatestController
 from supatest.browser.browser import SupatestBrowser
 
 logger = logging.getLogger("py_ws_server")
@@ -98,6 +99,8 @@ class Executor:
                     cdp_url=connection_url,
                 )
             )
+
+            controller = SupatestController(exclude_actions=['search_google', 'extract_content', 'scroll_to_text'])
             
             # Initialize agent with modified AzureChatOpenAI settings
             model = AzureChatOpenAI(
@@ -117,6 +120,7 @@ class Executor:
                 task=task,
                 llm=model,
                 browser=browser,
+                controller=controller,
                 send_message=send_message,
                 goal_step_id=goal_id,
                 requestId=requestId,
