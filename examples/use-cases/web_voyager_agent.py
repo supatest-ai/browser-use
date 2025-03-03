@@ -68,9 +68,9 @@ llm = AzureChatOpenAI(
 # Go to https://blazedemo.com/index.php and get all dropdown options for departure city and destination city. Then select Boson for departure city and London for destination city. Just do nothing after that.
 # """
 
-TASK = """
-Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Scroll down by 1500 pixels and then up by 500 pixels. Then Go back to coursera homepage and switch to another tab and open coursera homepage again. Search 'full stack developer course' in search bar by pressing 'Enter'.
-"""
+# TASK = """
+# Browse coursera using https://www.coursera.org/ and then seach for IBM AI Developer and search by pressing 'Enter'. Scroll down by 1500 pixels and then up by 500 pixels. Then Go back to coursera homepage and switch to another tab and open coursera homepage again. Search 'full stack developer course' in search bar by pressing 'Enter'.
+# """
 
 
 TASK = """

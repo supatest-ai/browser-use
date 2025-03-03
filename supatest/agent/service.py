@@ -114,6 +114,9 @@ class SupatestAgent(Agent[Context]):
         self.requestId = requestId
         self.testCaseId = testCaseId
 
+        # New variable to keep track of consective_eval_failure
+        self.consecutive_eval_failure = 0
+
         # Store our custom action descriptions
         self.available_actions = available_actions
         
@@ -294,6 +297,7 @@ class SupatestAgent(Agent[Context]):
             try:
                 model_output = await self.get_next_action(input_messages)
                 await self._log_response(model_output)
+                await self._check_eval_failure(model_output, step_info)
 
                 if self.register_new_step_callback:
                     await self.register_new_step_callback(state, model_output, self.state.n_steps)
@@ -558,3 +562,12 @@ class SupatestAgent(Agent[Context]):
         except Exception as e:
             logger.warning(f"Failed to send action update: {str(e)}")
             return steps  # Return original steps if there was an error
+        
+    async def _check_eval_failure(self, model_output: SupatestAgentOutput, step_info: AgentStepInfo | None = None) -> None:
+        """Check if the evaluation of the previous goal failed"""
+        if step_info and step_info.step_number > 0 and ('Failed' in model_output.current_state.evaluation_previous_goal or 'Unknown' in model_output.current_state.evaluation_previous_goal):
+            self.consecutive_eval_failure += 1
+            if self.consecutive_eval_failure >= self.settings.max_eval_failures:
+                logger.info("Max eval failures reached: Generate Done Action with success as False")
+        else: 
+            self.consecutive_eval_failure = 0
