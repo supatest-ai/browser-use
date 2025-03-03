@@ -69,8 +69,10 @@ class SupatestAgent(Agent[Context]):
         testCaseId: Optional[str] = None,
         **kwargs
     ):
+        # Initialize consecutive_eval_failure first
+        self.consecutive_eval_failure = 0
+        
         # Get custom action descriptions from our registry before calling super().__init__
-        # This ensures our custom actions are used throughout initialization
         controller_registry = controller.registry
         available_actions = controller_registry.get_prompt_description()
         
@@ -94,7 +96,7 @@ class SupatestAgent(Agent[Context]):
                 custom_system_prompt = custom_system_prompt.format(max_actions=max_actions)
                 kwargs['override_system_message'] = custom_system_prompt
             except Exception as e:
-                logger.warning(f"Failed to load custom system prompt: {e}")
+                logger.warning(f"Failed to load custom system prompt: {e}") 
         
         super().__init__(
             task=task,
@@ -113,20 +115,16 @@ class SupatestAgent(Agent[Context]):
         self.goal_step_id = goal_step_id
         self.requestId = requestId
         self.testCaseId = testCaseId
-
-        # New variable to keep track of consective_eval_failure
-        self.consecutive_eval_failure = 0
-
+        
         # Store our custom action descriptions
         self.available_actions = available_actions
-        
-        # Reinitialize the message manager with our custom action descriptions
+
         self._message_manager = MessageManager(
             task=task,
-            system_message=SystemPrompt(
+            system_message= SystemPrompt(
                 action_description=self.available_actions,
                 max_actions_per_step=self.settings.max_actions_per_step,
-                override_system_message=self.settings.override_system_message,
+                override_system_message=kwargs.get('override_system_message'),
                 extend_system_message=self.settings.extend_system_message,
             ).get_system_message(),
             settings=MessageManagerSettings(
@@ -138,7 +136,7 @@ class SupatestAgent(Agent[Context]):
             ),
             state=self.state.message_manager_state,
         )
- 
+        
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
@@ -276,6 +274,14 @@ class SupatestAgent(Agent[Context]):
 
             self._message_manager.add_state_message(state, self.state.last_result, step_info, self.settings.use_vision)
 
+            if self.consecutive_eval_failure >= self.settings.max_failures:
+                logger.info("⚠️  Max eval failures reached: Generate Done Action with success as False")
+                # Add a human message about the consecutive failures
+                failure_msg = (
+                    f"You have failed to achieve your goals {self.consecutive_eval_failure} times in a row. You must now generate a 'done' action with success=false and provide a detailed explanation of why the task could not be completed after multiple attempts in 'text' key."
+                )
+                self._message_manager._add_message_with_tokens(HumanMessage(content=failure_msg))
+
             # Run planner at specified intervals if planner is configured
             if self.settings.planner_llm and self.state.n_steps % self.settings.planner_interval == 0:
                 plan = await self._run_planner()
@@ -296,8 +302,8 @@ class SupatestAgent(Agent[Context]):
 
             try:
                 model_output = await self.get_next_action(input_messages)
-                await self._log_response(model_output)
                 await self._check_eval_failure(model_output, step_info)
+                await self._log_response(model_output)
 
                 if self.register_new_step_callback:
                     await self.register_new_step_callback(state, model_output, self.state.n_steps)
@@ -567,7 +573,5 @@ class SupatestAgent(Agent[Context]):
         """Check if the evaluation of the previous goal failed"""
         if step_info and step_info.step_number > 0 and ('Failed' in model_output.current_state.evaluation_previous_goal or 'Unknown' in model_output.current_state.evaluation_previous_goal):
             self.consecutive_eval_failure += 1
-            if self.consecutive_eval_failure >= self.settings.max_eval_failures:
-                logger.info("Max eval failures reached: Generate Done Action with success as False")
-        else: 
+        else:
             self.consecutive_eval_failure = 0

@@ -33,19 +33,14 @@ Interactive Elements
 
 1. RESPONSE FORMAT: You must ALWAYS respond with valid JSON in this exact format:
    {{
-     "current_state": {{
-       "page_summary": "Quick detailed summary of new information from the current page which is not yet in the task history memory. Be specific with details which are important for the task. This is not on the meta level, but should be facts. If all the information is already in the task history memory, leave this empty.",
-       "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not". If the evaluation status is 'Failed' for more than thrice, then you should follow instructions provided in 'HANDLING FAILURES AND TASK COMPLETION',
-       "memory": "Description of what has been done and what you need to remember. Be very specific. Count here ALWAYS how many times you have done something and how many remain. E.g. 0 out of 10 websites analyzed. Continue with abc and xyz",
-       "next_goal": "What needs to be done with the next actions",
-       "thought": "Think about the requirements that have been completed in previous operations and the requirements that need to be completed in the next one operation. If your output of prev_action_evaluation is 'Failed', please reflect and output your reflection here."
-       "action": [{{"one_action_name": {{// action-specific parameter, "title": "Title for this action describing what this action is doing"}}}}, // ... more actions in sequence]}},
+     "current_state": {{"page_summary": "Quick detailed summary of new information from the current page which is not yet in the task history memory. Be specific with details which are important for the task. This is not on the meta level, but should be facts. If all the information is already in the task history memory, leave this empty.", "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not". The result of this evaluation is kept track of and provided to you to handle consecutive failures based on this evaluation. More information is provided in 'HANDLING FAILURES AND TASK COMPLETION' section. "memory": "Description of what has been done and what you need to remember. Be very specific. Count here ALWAYS how many times you have done something and how many remain. E.g. 0 out of 10 websites analyzed. Continue with abc and xyz", "next_goal": "What needs to be done with the next actions", "thought": "Think about the requirements that have been completed in previous operations and the requirements that need to be completed in the next one operation. If your output of prev_action_evaluation is 'Failed', please reflect and output your reflection here."}}
+   "action": [{{"one_action_name": {{// action-specific parameter, "title": "Title for this action describing what this action is doing"}}}}, // ... more actions in sequence],
    }}
 
-2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {{max_actions}} actions per sequence.
+2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {max_actions} actions per sequence.
    Every action MUST include a "title" field that describes what the action does.
-   Each action model now includes an `isExecuted` field, which defaults to `false`. This indicates that the action has not yet been executed.
-   If the context receives `isExecuted` as `true`, it means that the action is currently being executed.
+   Each action model now includes an 'isExecuted' field, which defaults to 'false'. This indicates that the action has not yet been executed.
+   If the context receives 'isExecuted' as 'true', it means that the action is currently being executed.
 
    Common action sequences:
 
@@ -85,15 +80,13 @@ Interactive Elements
 
 6. HANDLING FAILURES AND TASK COMPLETION
 
-- If your actions fail when executed, reflect on why and try a different approach
-- If your actions succeed technically but fail to achieve the intended goal (logical failure), document this in your evaluation and keep track of your failed attemps.
-- If you encounter failures more than thrice (VERY IMPORTANT), stop at that point and use the "done" action with success=false
-- If you find yourself attempting the same or similar actions repeatedly without progress for more than thrice (VERY IMPORTANT), use the "done" action with success=false
+- When you receive a message indicating multiple consecutive failures based on evaluation, then stop at that point and use the "done" action with success=false.
 - When using "done" with success=false, provide detailed information about:
   - What approaches you tried
   - Why each approach failed
   - What obstacles prevented task completion
   - Any partial results or information you were able to gather
+  - Proivide a comprehensive reasoning in 'text' key for this action type.
 - Don't persist with approaches that clearly aren't working - quality assurance requires knowing when to report an issue
 - Remember that identifying impossible or problematic tasks is valuable feedback
 
