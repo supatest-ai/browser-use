@@ -249,12 +249,7 @@ class SupatestAgent(Agent[Context]):
         """Check if we should stop due to too many failures"""
         if self.state.consecutive_failures >= self.settings.max_failures:
             if self.send_message:
-                await self._send_message("AGENT_GOAL_STOP_RES", {
-                    "requestId": self.requestId,
-                    "testCaseId": self.testCaseId,
-                    "success": False,
-                    "error": f"Stopping due to {self.settings.max_failures} consecutive failures"
-                })
+                await self._send_message("ERROR", f"Stopping due to {self.settings.max_failures} consecutive failures")
             logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
             return True
         return False
@@ -319,9 +314,6 @@ class SupatestAgent(Agent[Context]):
             except Exception as e:
                 self._message_manager._remove_last_state_message()
                 error_str = str(e)
-                if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
-                    if self.send_message:
-                        await self._send_message("ERROR", "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines.")
                 self.state.last_result = [ActionResult(error=error_str, include_in_memory=True)]
                 raise e
 
@@ -343,16 +335,8 @@ class SupatestAgent(Agent[Context]):
             result = await self._handle_step_error(e)
             self.state.last_result = result
             error_str = str(e)
+            logger.error(f'❌ Error: {error_str}')
             
-            if "ResponsibleAIPolicyViolation" in error_str or "content_filter" in error_str:
-                if self.send_message:
-                    await self._send_message("ERROR", "The AI has encountered a policy violation.")
-                    await self._send_message("AGENT_GOAL_STOP_RES", {
-                        "requestId": self.requestId,
-                        "testCaseId": self.testCaseId,
-                        "success": False,
-                        "error": "AI policy violation"
-                    })
 
         finally:
             step_end_time = time.time()
@@ -392,13 +376,20 @@ class SupatestAgent(Agent[Context]):
             for step in range(max_steps):
                 if self.state.consecutive_failures >= self.settings.max_failures:
                     logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
-                    await self._send_message("ERROR", "The AI has encountered a policy violation.")
-                    await self._send_message("AGENT_GOAL_STOP_RES", {
-                        "requestId": self.requestId,
-                        "testCaseId": self.testCaseId,
-                        "success": False,
-                        "error": f"Stopping due to {self.settings.max_failures} consecutive failures",
-                    })
+                    error_messages = [r.error for r in self.state.last_result if r.error]
+                    logger.error(f'❌ Error message: {error_messages}')
+                    if error_messages:
+                        # Check for specific error codes in the error messages
+                        if any("ResponsibleAIPolicyViolation" in msg for msg in error_messages):
+                            error_message = "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines."
+                        elif any("content_filter" in msg for msg in error_messages):
+                            error_message = "The AI has encountered a policy violation. Please ensure that the request complies with the content guidelines."
+                        else:
+                            error_message = "The agent was unable to complete the task. An unknown error occurred."
+                    else:
+                        error_message = "Unknown error occurred in agent execution"
+                    
+                    await self._send_message("ERROR", error_message)
                     break
 
                 if self.state.stopped:
@@ -434,12 +425,7 @@ class SupatestAgent(Agent[Context]):
             else:
                 logger.info('❌ Failed to complete task in maximum steps')
                 if self.send_message:
-                    await self._send_message("AGENT_GOAL_STOP_RES", {
-                        "requestId": self.requestId,
-                        "testCaseId": self.testCaseId,
-                        "success": False,
-                        "error": "Failed to complete task in maximum steps"
-                    })
+                    await self._send_message("ERROR", "Failed to complete task in maximum steps")
 
             return self.state.history
 
