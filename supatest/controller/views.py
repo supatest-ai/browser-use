@@ -14,6 +14,12 @@ class GoBackAction(BaseModel):
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: bool = Field(default=False)
 
+class WaitAction(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    seconds: int = 3
+    title: Optional[str] = Field(None, description="Human readable description of what this action does")
+    isExecuted: bool = Field(default=False)
+
 class ClickElementAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     index: int

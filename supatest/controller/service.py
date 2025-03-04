@@ -26,6 +26,7 @@ from supatest.controller.views import (
     SwitchTabAction,
     SelectDropdownOptionAction,
     GetDropdownOptionsAction,
+    WaitAction,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,11 +83,12 @@ class SupatestController(Controller[Context]):
             logger.info(msg)
             return ActionResult(extracted_content=msg, include_in_memory=True)
 
-        @self.registry.action('Wait for x seconds default 3')
-        async def wait(seconds: int = 3):
-            msg = f'🕒  Waiting for {seconds} seconds'
+        @self.registry.action('Wait for x seconds default 3', param_model=WaitAction)
+        async def wait(params: WaitAction, browser: SupatestBrowserContext):
+            page = await browser.get_current_page()
+            await page.wait_for_timeout(params.seconds * 1000)
+            msg = f'🕒  Waiting for {params.seconds} seconds'
             logger.info(msg)
-            await asyncio.sleep(seconds)
             return ActionResult(extracted_content=msg, include_in_memory=True)
 
         @self.registry.action('Click element', param_model=ClickElementAction)
