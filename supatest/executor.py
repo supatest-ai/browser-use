@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Optional
+from typing import Optional, Any
 import asyncio
 
 import socketio
@@ -23,6 +23,12 @@ class Executor:
         self.agent_task = None
         # We'll store the Socket.IO client so we can disconnect later
         self.sio = None
+        # Add a flag to track intentional disconnects
+        self.is_stopping = False
+        # Add connection state tracking
+        self.reconnection_in_progress = False
+        self.retry_count = 0
+        self.MAX_RETRIES = 3
 
     def _build_automation_uri(self, goal_id: str, setup_data) -> str:
         base_url = os.getenv("AUTOMATION_BASE_URL", "http://localhost:8877")
@@ -36,9 +42,56 @@ class Executor:
         Stop the agent by calling `agent.stop()` and canceling the task if it exists.
         """
         if self.agent:
-            await self.agent.stop()
+            try:
+                await self.agent.stop()
+            except Exception as e:
+                logger.error(f"Error stopping agent: {str(e)}")
         if self.agent_task:
-            self.agent_task.cancel()
+            try:
+                self.agent_task.cancel()
+                await asyncio.sleep(0.5)  # Give a small window for cleanup
+            except Exception as e:
+                logger.error(f"Error canceling agent task: {str(e)}")
+
+    async def _handle_reconnection(self, error_msg=None):
+        """Centralized reconnection logic"""
+        if self.is_stopping or self.reconnection_in_progress:
+            return False
+
+        self.reconnection_in_progress = True
+        try:
+            if self.retry_count < self.MAX_RETRIES:
+                self.retry_count += 1
+                logger.info(f"Attempting to reconnect... (Attempt {self.retry_count}/{self.MAX_RETRIES})")
+                
+                if self.sio.connected:
+                    await self.sio.disconnect()
+                
+                await asyncio.sleep(2 ** self.retry_count)  # Exponential backoff
+                
+                await self.sio.connect(
+                    self._current_automation_uri,
+                    transports=["websocket"],
+                    namespaces=["/"]
+                )
+                logger.info("Reconnection successful")
+                self.retry_count = 0  # Reset retry count on success
+                self.reconnection_in_progress = False
+                return True
+            else:
+                logger.error("Max reconnection attempts reached")
+                if error_msg:
+                    await self.handler.emit_automation_error(
+                        None, self._current_goal_id, error_msg,
+                        self._current_request_id, self._current_test_case_id
+                    )
+                self.is_stopping = True
+                await self.stop_agent()
+                return False
+        except Exception as e:
+            logger.error(f"Reconnection attempt failed: {str(e)}")
+            self.reconnection_in_progress = False
+            return False
 
     async def execute_automation(
         self,
@@ -55,23 +108,47 @@ class Executor:
         The agent will run until completion, or until we receive a stop message via Socket.IO.
         """
         self.sio = socketio.AsyncClient()
+        # Store current execution parameters for reconnection
+        self._current_automation_uri = automation_uri
+        self._current_goal_id = goal_id
+        self._current_request_id = requestId
+        self._current_test_case_id = testCaseId
+        
+        @self.sio.event
+        async def disconnect(reason=None):
+            logger.info(f"Disconnected from automation server: {reason}")
+            if not self.is_stopping:
+                await self._handle_reconnection()
+
+        @self.sio.on("connect_error")
+        async def on_connect_error(error):
+            if not self.is_stopping:
+                await self._handle_reconnection(f"WebSocket connection error: {str(error)}")
 
         try:
-            # Connect to the server
-            await self.sio.connect(
-                automation_uri, transports=["websocket"], namespaces=["/"]
+            # Initial connection with timeout
+            await asyncio.wait_for(
+                self.sio.connect(
+                    automation_uri, 
+                    transports=["websocket"], 
+                    namespaces=["/"]
+                ),
+                timeout=30.0  # 30 seconds timeout
             )
+            
+            logger.info(f"Connected to automation server at {automation_uri}")
 
             async def send_message(msg: dict) -> bool:
                 """
                 Helper for sending messages via Socket.IO.
                 """
-                try:
-                    await self.sio.emit("message", json.dumps(msg), namespace="/", callback=True)
-                    return True
-                except Exception as e:
-                    logger.error(f"Failed to send message: {str(e)}")
-                    return False
+                if self.sio.connected:
+                        await self.sio.emit("message", json.dumps(msg), namespace="/", callback=True)
+                        return True
+                else:
+                    logger.error("Socket.IO client is not connected. Cannot send message.")
+
+
 
             @self.sio.on("message", namespace="/")
             async def handle_incoming_message(msg_str):
@@ -177,3 +254,4 @@ class Executor:
             await self.handler.emit_automation_error(
                 None, goal_id, str(e), setup_data.request_id, setup_data.test_case_id
             )
+
