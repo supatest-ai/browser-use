@@ -215,7 +215,7 @@ class SupatestAgent(Agent[Context]):
         if self.state.last_result and any(r.error for r in self.state.last_result):
             error_info = {
                 "errorCount": self.state.consecutive_failures,
-                "errorType": "action_execution",
+                "errorType": "ACTION_EXECUTION_ERROR",
                 "errorMessage": "; ".join([r.error for r in self.state.last_result if r.error])
             }
 
@@ -389,7 +389,7 @@ class SupatestAgent(Agent[Context]):
                        error_info = {
                             "errorCount": self.state.consecutive_failures,
                             "errorType": "ACTION_EXECUTION_ERROR",
-                            "errorMessage": error_messages or error_message
+                            "errorMessage": error_message
                         }
                 
                     # Send single websocket message with all data
