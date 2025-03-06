@@ -166,6 +166,7 @@ class SupatestAgent(Agent[Context]):
             parsed: SupatestAgentOutput | None = response['parsed']
         else:
             structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
+            logger.info(f"🤖 Calling LLM with messages: {input_messages}")
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
             parsed: SupatestAgentOutput | None = response['parsed']
 
