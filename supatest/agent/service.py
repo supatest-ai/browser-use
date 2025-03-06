@@ -67,6 +67,7 @@ class SupatestAgent(Agent[Context]):
         goal_step_id: Optional[str] = None,
         requestId: Optional[str] = None,
         testCaseId: Optional[str] = None,
+        active_page_id: Optional[str] = None,
         **kwargs
     ):
         # Initialize consecutive_eval_failure first
@@ -82,7 +83,7 @@ class SupatestAgent(Agent[Context]):
         
         # If only browser is provided, create a SupatestBrowserContext
         if browser and not browser_context:
-            browser_context = SupatestBrowserContext(browser=browser, config=browser.config.new_context_config)
+            browser_context = SupatestBrowserContext(browser=browser, config=browser.config.new_context_config, active_page_id=active_page_id)
             # We created the browser_context, so we should close it
             self.injected_browser_context = False
         
@@ -115,7 +116,7 @@ class SupatestAgent(Agent[Context]):
         self.goal_step_id = goal_step_id
         self.requestId = requestId
         self.testCaseId = testCaseId
-        
+        self.active_page_id = active_page_id
         # Store our custom action descriptions
         self.available_actions = available_actions
 

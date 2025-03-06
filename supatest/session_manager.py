@@ -11,7 +11,7 @@ class AutomationSetup:
     test_case_id: str
     request_id: str
     sensitive_data: Optional[dict]
-    
+    active_page_id: str    
 class SessionManager:
     def __init__(self):
         self._automation_setups: Dict[str, AutomationSetup] = {}
@@ -34,7 +34,8 @@ class SessionManager:
                 task=setup_data.get("task"),
                 test_case_id=setup_data.get("testCaseId"),
                 request_id=setup_data.get("requestId"),
-                sensitive_data=setup_data.get("sensitiveData")
+                sensitive_data=setup_data.get("sensitiveData"),
+                active_page_id=setup_data.get("activeBrowserTabId")
             )
             
     async def get_automation_setup(self, goal_id: str) -> Optional[AutomationSetup]:
