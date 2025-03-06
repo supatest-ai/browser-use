@@ -101,6 +101,7 @@ class Executor:
         goal_id: str,
         requestId: str,
         testCaseId: str,
+        active_page_id: str,
         sensitiveData: Optional[dict] = None,
     ):
         """
@@ -113,7 +114,7 @@ class Executor:
         self._current_goal_id = goal_id
         self._current_request_id = requestId
         self._current_test_case_id = testCaseId
-        
+        self._current_active_page_id = active_page_id
         @self.sio.event
         async def disconnect(reason=None):
             logger.info(f"Disconnected from automation server: {reason}")
@@ -203,6 +204,7 @@ class Executor:
                 requestId=requestId,
                 testCaseId=testCaseId,
                 sensitive_data=sensitiveData,
+                active_page_id=active_page_id,
             )
 
             # Start the agent in the background
@@ -248,6 +250,7 @@ class Executor:
                 requestId=setup_data.request_id,
                 testCaseId=setup_data.test_case_id,
                 sensitiveData=setup_data.sensitive_data,
+                active_page_id=setup_data.active_page_id,
             )
         except Exception as e:
             logger.error(f"Automation failed: {str(e)}", exc_info=True)
