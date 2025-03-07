@@ -27,13 +27,13 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
 from browser_use.agent.service import Agent
-from browser_use.agent.views import ActionResult
 from browser_use.telemetry.views import AgentEndTelemetryEvent, AgentStepTelemetryEvent
 from browser_use.agent.views import AgentStepInfo, StepMetadata, AgentHistoryList
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
+from browser_use.browser.views import  BrowserStateHistory
 
-from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain, SupatestAgentHistoryList
+from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain,SupatestAgentHistory, SupatestAgentHistoryList, SupatestActionResult
 from supatest.controller.registry.views import SupatestActionModel
 
 from supatest.browser.browser import SupatestBrowser
@@ -252,7 +252,7 @@ class SupatestAgent(Agent[Context]):
         logger.info(f'📍 Step {self.state.n_steps}')
         state = None
         model_output = None
-        result: list[ActionResult] = []
+        result: list[SupatestActionResult] = []
         step_start_time = time.time()
         tokens = 0
 
@@ -307,7 +307,7 @@ class SupatestAgent(Agent[Context]):
             except Exception as e:
                 self._message_manager._remove_last_state_message()
                 error_str = str(e)
-                self.state.last_result = [ActionResult(error=error_str, include_in_memory=True)]
+                self.state.last_result = [SupatestActionResult(error=error_str, include_in_memory=True, isExecuted='failure')]
                 raise e
 
             result = await self.multi_act(model_output.action)
@@ -321,7 +321,7 @@ class SupatestAgent(Agent[Context]):
         except InterruptedError:
             logger.debug('Agent paused')
             self.state.last_result = [
-                ActionResult(error='The agent was paused - now continuing actions might need to be repeated', include_in_memory=True)
+                SupatestActionResult(error='The agent was paused - now continuing actions might need to be repeated', include_in_memory=True, isExecuted='failure')
             ]
             return
         except Exception as e:
@@ -356,6 +356,32 @@ class SupatestAgent(Agent[Context]):
                 )
     
                 self._make_history_item(model_output, state, result, metadata)
+
+    def _make_history_item(
+        self,
+        model_output: SupatestAgentOutput | None,
+        state: BrowserState,
+        result: list[SupatestActionResult],
+        metadata: Optional[StepMetadata] = None,
+    ) -> None:
+        """Create and store history item"""
+        
+        if model_output:
+            interacted_elements = SupatestAgentHistory.get_interacted_element(model_output, state.selector_map)
+        else:
+            interacted_elements = [None]
+
+        state_history = BrowserStateHistory(
+            url=state.url,
+            title=state.title,
+            tabs=state.tabs,
+            interacted_element=interacted_elements,
+            screenshot=state.screenshot,
+        )
+
+        history_item = SupatestAgentHistory(model_output=model_output, result=result, state=state_history, metadata=metadata)
+
+        self.state.history.history.append(history_item)
 
     async def run(self, max_steps: int = 100) -> SupatestAgentHistoryList:
         """Execute the task with maximum number of steps and custom completion handling"""
@@ -469,7 +495,7 @@ class SupatestAgent(Agent[Context]):
         self,
         actions: Sequence[SupatestActionModel],
         check_for_new_elements: bool = True,
-    ) -> list[ActionResult]:
+    ) -> list[SupatestActionResult]:
         """Execute multiple actions with SupatestActionModel type"""
         results = []
 
@@ -485,14 +511,18 @@ class SupatestAgent(Agent[Context]):
             steps.append(step)
 
         for i, action in enumerate(actions):
+            isExecuted = 'pending'
             if action.get_index() is not None and i != 0:
                 new_state = await self.browser_context.get_state()
                 new_path_hashes = set(e.hash.branch_path_hash for e in new_state.selector_map.values())
                 if check_for_new_elements and not new_path_hashes.issubset(cached_path_hashes):
                     # next action requires index but there are new elements on the page
+                    isExecuted = 'failure'
+                    step = action.model_dump(exclude_none=True)
+                    steps = await self._send_action_update(step, isExecuted, steps)
                     msg = f'Something new appeared after action {i} / {len(actions)}'
                     logger.info(msg)
-                    results.append(ActionResult(extracted_content=msg, include_in_memory=True))
+                    results.append(SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='failure'))
                     break
 
             await self._raise_if_stopped_or_paused()
@@ -506,13 +536,13 @@ class SupatestAgent(Agent[Context]):
                 context=self.context,
             )
 
-
+            isExecuted = result.isExecuted 
             step = action.model_dump(exclude_none=True)  
 
             
             # Send update that the action has been executed with the result
             # The key change: update the steps variable with the returned updated steps
-            steps = await self._send_action_update(step, True, steps)
+            steps = await self._send_action_update(step, isExecuted, steps)
             results.append(result)
 
             logger.debug(f'Executed action {i + 1} / {len(actions)}')
@@ -525,34 +555,36 @@ class SupatestAgent(Agent[Context]):
         return results
 
 
-    async def _send_action_update(self, action, is_executed: bool, steps: list[dict]) -> list[dict]:
+    async def _send_action_update(self, action, is_executed: str, steps: list[dict]) -> list[dict]:
         """
         Send action execution status update via websocket
 
         Args:
             action: The action that was executed
-            is_executed: Whether the action was executed successfully
+            is_executed: The execution status ('pending', 'success', 'failure')
             steps: List of all steps in the current sequence
 
         Returns:
-            The updated steps list with execution status, flattened
+            The updated steps list with execution status
         """
         if not self.send_message:
             return steps  # Return original steps if no message sending
 
         try:
-            # Update the isExecuted status of the corresponding step
-            for step in steps:
-                action_key = next(iter(step))  # Get the action type ('input_text', 'click_element', etc.)
-                
-                # Extract action details
-                action_details = action.get(action_key)  # Get the actual action dictionary
-                
-                if not action_details:
-                    continue  # Skip if there's no matching action type
+            # Get the action type and details from the current action
+            action_type = next(iter(action))  # Get the action type (e.g., 'input_text', 'click_element')
+            action_details = action[action_type]
 
-                if step[action_key]['id'] == action_details['id']:  # Match the action by ID
-                    step[action_key]['isExecuted'] = is_executed  # Update the isExecuted status
+            # Find and update the matching step
+            for step in steps:
+                step_type = next(iter(step))
+                step_details = step[step_type]
+                
+                # Match both the action type and the action details (using ID or other unique identifiers)
+                if (step_type == action_type and 
+                    step_details.get('supatest_locator_id') == action_details.get('supatest_locator_id') and
+                    step_details.get('index') == action_details.get('index')):
+                    step[step_type]['isExecuted'] = is_executed
                     break
 
 
@@ -563,7 +595,6 @@ class SupatestAgent(Agent[Context]):
                 "steps": simplified_steps
             })
 
-            # Return the updated steps so they can be used for the next action
             return steps
 
         except Exception as e:
