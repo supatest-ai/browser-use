@@ -321,7 +321,11 @@ class SupatestAgent(Agent[Context]):
         except InterruptedError:
             logger.debug('Agent paused')
             self.state.last_result = [
-                SupatestActionResult(error='The agent was paused - now continuing actions might need to be repeated', include_in_memory=True, isExecuted='failure')
+                SupatestActionResult(
+                    error='The agent was paused - now continuing actions might need to be repeated',
+                    include_in_memory=True,
+                    isExecuted='failure'
+                )
             ]
             return
         except Exception as e:
@@ -607,3 +611,11 @@ class SupatestAgent(Agent[Context]):
             self.consecutive_eval_failure += 1
         else:
             self.consecutive_eval_failure = 0
+
+    async def _handle_step_error(self, e: Exception) -> list[SupatestActionResult]:
+        error_str = str(e)
+        return [SupatestActionResult(
+            error=error_str,
+            include_in_memory=True,
+            isExecuted='failure'
+        )]
