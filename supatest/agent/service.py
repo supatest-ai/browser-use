@@ -428,7 +428,7 @@ class SupatestAgent(Agent[Context]):
                         "requestId": self.requestId,
                         "testCaseId": self.testCaseId,
                         "success": False,
-                        "error": json.dumps(error_info),
+                        "error": json.dumps(error_info) if error_info else None,
                     })
                     break
 
