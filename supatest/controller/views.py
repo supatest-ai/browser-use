@@ -7,18 +7,18 @@ class GoToUrlAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     url: str
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class GoBackAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class WaitAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     seconds: int = 3
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class ClickElementAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -26,7 +26,7 @@ class ClickElementAction(BaseModel):
     xpath: Optional[str] = None
     supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class InputTextAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -35,38 +35,38 @@ class InputTextAction(BaseModel):
     xpath: Optional[str] = None
     supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class DoneAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     text: str
     success: bool
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class SwitchTabAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     page_id: int
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class OpenTabAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     url: str
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class ScrollAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     amount: Optional[int] = None  # The number of pixels to scroll. If None, scroll down/up one page
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class SendKeysAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     keys: str
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class SelectDropdownOptionAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -75,7 +75,7 @@ class SelectDropdownOptionAction(BaseModel):
     xpath: Optional[str] = None
     supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class GetDropdownOptionsAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -83,7 +83,7 @@ class GetDropdownOptionsAction(BaseModel):
     xpath: Optional[str] = None
     supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')
 
 class NoParamsAction(BaseModel):
     """
@@ -92,4 +92,4 @@ class NoParamsAction(BaseModel):
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
-    isExecuted: bool = Field(default=False)
+    isExecuted: str = Field(default='pending')

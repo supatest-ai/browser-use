@@ -21,6 +21,16 @@ class SupatestAgentBrain(AgentBrain):
     next_goal: str = Field(default="", description="Next goal to achieve")
     thought: Optional[str] = Field(default=None, description="Current thought process")
 
+class SupatestActionResult(BaseModel):
+	"""Result of executing an action"""
+
+	is_done: Optional[bool] = False
+	success: Optional[bool] = None
+	extracted_content: Optional[str] = None
+	error: Optional[str] = None
+	isExecuted: Optional[str] = 'pending'
+	include_in_memory: bool = False  # whether to include in past messages as context or not
+
 
 class SupatestAgentOutput(AgentOutput):
     """Extended AgentOutput with custom implementation"""
@@ -50,7 +60,7 @@ class SupatestAgentHistory(AgentHistory):
     """Extended AgentHistory that uses our custom AgentOutput"""
     
     model_output: SupatestAgentOutput | None
-
+    result: list[SupatestActionResult]
     class Config:
         arbitrary_types_allowed = True
 
@@ -73,10 +83,20 @@ class SupatestAgentHistoryList(AgentHistoryList):
             last_result = self.history[-1].result[-1]
             return last_result.is_done is True
         return False
+
+    def isExecuted(self) -> list[ActionResult]:
+        """Get all results from history"""
+        results = []
+        for h in self.history:
+            results.extend([r for r in h.isExecuted if r])
+        return results
+
+
 # Re-export other classes that we're not modifying
 __all__ = [
     'SupatestAgentBrain',
     'SupatestAgentOutput',
     'SupatestAgentHistory',
     'SupatestAgentHistoryList',
+    'SupatestActionResult',
 ] 
