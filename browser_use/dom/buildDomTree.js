@@ -1013,6 +1013,12 @@
           nodeData.isInteractive = isInteractiveElement(node);
           if (nodeData.isInteractive) {
             setSupatestLocatorId(node);
+            nodeData.attributes = nodeData.attributes || {};
+            if (!nodeData.attributes["supatest_locator_id"]) {
+              nodeData.attributes["supatest_locator_id"] = node.getAttribute(
+                "supatest_locator_id"
+              );
+            }
             nodeData.isInViewport = true;
             nodeData.highlightIndex = highlightIndex++;
 
