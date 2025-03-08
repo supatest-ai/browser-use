@@ -36,8 +36,8 @@ class SupatestBrowserContext(BrowserContext):
 
         # Get or create a page to use
         pages = context.pages
-        print(f'active_page_id received: {self.active_page_id}')
-        print(f'available pages: {pages}')
+        logger.info(f'active_page_id received: {self.active_page_id}')
+        logger.info(f'available pages: {pages}')
         
         # making the tabId 0 as default 
         tabId = 0

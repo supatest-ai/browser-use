@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar, Sequence
 
@@ -211,50 +212,24 @@ class SupatestAgent(Agent[Context]):
             steps.append(step)
             logger.info(f'🛠️  Action {i + 1}/{len(response.action)}: {action.model_dump_json(exclude_unset=True)}')
 
-        # Create error info if there are failures
-        error_info = None
-        if self.state.last_result and any(r.error for r in self.state.last_result):
-            error_info = {
-                "errorCount": self.state.consecutive_failures,
-                "errorType": "ACTION_EXECUTION_ERROR",
-                "errorMessage": "; ".join([r.error for r in self.state.last_result if r.error])
-            }
-
-        # Send single websocket message with all data
-        if self.send_message:
-            await self._send_message("AGENT_SUB_GOAL_UPDATE", {
-                "pageSummary": response.current_state.page_summary,
-                "eval": response.current_state.evaluation_previous_goal,
-                "memory": response.current_state.memory,
-                "nextGoal": response.current_state.next_goal,
-                "thought": response.current_state.thought,
-                "steps": steps,
-                "error": error_info
-            })
-
-    async def _send_message(self, message_type: str, message_data: Any) -> None:
-        """Send websocket messages if send_message callback is configured"""
-        if not self.send_message:
-            return
+    async def _handle_step_error(self, e: Exception) -> list[SupatestActionResult]:
+            error_str = str(e)
+            return [SupatestActionResult(
+                error=error_str,
+                include_in_memory=True,
+                isExecuted='failure'
+            )]
             
-        try:
-            message = {
-                "type": message_type,
-                "goalId": self.goal_step_id,
-                "message": message_data if isinstance(message_data, dict) else {"message": str(message_data)}
-            }
-            await self.send_message(message)
-        except Exception as e:
-            logger.warning(f"Failed to send message: {str(e)}")
-
     async def step(self, step_info: Optional[AgentStepInfo] = None) -> None:
         """Execute one step of the task with custom error handling and messaging"""
-        logger.info(f'📍 Step {self.state.n_steps}')
         state = None
         model_output = None
         result: list[SupatestActionResult] = []
         step_start_time = time.time()
         tokens = 0
+        subgoal_id = uuid.uuid4()
+        logger.info(f'\n\n --------------------------------------')
+        logger.info(f'📍 Step {self.state.n_steps} | Subgoal ID: {subgoal_id}')
 
         try:
             state = await self.browser_context.get_state()
@@ -262,6 +237,7 @@ class SupatestAgent(Agent[Context]):
 
             self._message_manager.add_state_message(state, self.state.last_result, step_info, self.settings.use_vision)
 
+            # Custom eval failure handling
             if self.consecutive_eval_failure >= self.settings.max_failures:
                 logger.info("⚠️  Max eval failures reached: Generate Done Action with success as False")
                 # Add a human message about the consecutive failures
@@ -288,10 +264,12 @@ class SupatestAgent(Agent[Context]):
             input_messages = self._message_manager.get_messages()
             tokens = self._message_manager.state.history.current_tokens
 
+            # Planning action from LLM
             try:
                 model_output = await self.get_next_action(input_messages)
                 await self._check_eval_failure(model_output, step_info)
                 await self._log_response(model_output)
+                await self._send_subgoal_update(subgoal_id, False, model_output)
 
                 if self.register_new_step_callback:
                     await self.register_new_step_callback(state, model_output, self.state.n_steps)
@@ -305,12 +283,21 @@ class SupatestAgent(Agent[Context]):
                 self._message_manager.add_model_output(model_output)
 
             except Exception as e:
-                self._message_manager._remove_last_state_message()
+                # Create steps array with all actions
                 error_str = str(e)
+                self._message_manager._remove_last_state_message()
                 self.state.last_result = [SupatestActionResult(error=error_str, include_in_memory=True, isExecuted='failure')]
+                custom_error_str = 'The agent was unable to generate a valid subgoal due to technical glitches'
+                error_info = {
+                    "errorCount": self.state.consecutive_failures,
+                    "errorType": "AGENT_PLANNER_ERROR",  # TODO: yet to decide the different error types
+                    "errorMessage": custom_error_str
+                }
+                await self._send_subgoal_update(subgoal_id, True, error_info=error_info)
                 raise e
 
-            result = await self.multi_act(model_output.action)
+            # Execute actions 
+            result = await self.multi_act(model_output.action, subgoal_id)
             self.state.last_result = result
 
             if len(result) > 0 and result[-1].is_done:
@@ -387,13 +374,14 @@ class SupatestAgent(Agent[Context]):
 
         self.state.history.history.append(history_item)
 
-    async def run(self, max_steps: int = 100) -> SupatestAgentHistoryList:
+    # Set the max steps to 20 for now
+    async def run(self, max_steps: int = 20) -> SupatestAgentHistoryList:
         """Execute the task with maximum number of steps and custom completion handling"""
         try:
             self._log_agent_run()
 
             if self.initial_actions:
-                result = await self.multi_act(self.initial_actions, check_for_new_elements=False)
+                result = await self.multi_act(self.initial_actions, subgoal_id=uuid.uuid4(), check_for_new_elements=False)
                 self.state.last_result = result
 
             for step in range(max_steps):
@@ -401,7 +389,7 @@ class SupatestAgent(Agent[Context]):
                     logger.error(f'❌ Stopping due to {self.settings.max_failures} consecutive failures')
                     error_messages = [r.error for r in self.state.last_result if r.error]
                     logger.error(f'❌ Error message: {error_messages}')
-                    error_message = "The agent was unable to achieve the specified goal. Please consider modifying the prompt and trying again."
+                    error_message = "The agent was unable to achieve the specified goal due to some prompt issues. Please consider modifying the prompt and trying again."
                     if error_messages:
                         # in the case of LLM we don't send it the errors in subgoal level
                         if (any("ResponsibleAIPolicyViolation" in msg for msg in error_messages) or 
@@ -412,25 +400,24 @@ class SupatestAgent(Agent[Context]):
                         else:
                             error_message = "The agent was unable to complete the task. Please try again."
                     else:
+                        # TODO: still not very sure of, need to check if this is correct 
                         error_message = "Unknown error occurred in agent execution"
-
-                    # # Create error info if there are failures
-                    error_info = None
-                    if self.state.consecutive_failures == 3:
-                       error_info = {
-                            "errorCount": self.state.consecutive_failures,
-                            "errorType": "ACTION_EXECUTION_ERROR",
-                            "errorMessage": error_message
-                        }
-                
-                    # Send single websocket message with all data
-                    await self._send_message("AGENT_GOAL_STOP_RES", {
-                        "requestId": self.requestId,
-                        "testCaseId": self.testCaseId,
-                        "success": False,
-                        "error": json.dumps(error_info) if error_info else None,
-                    })
-                    break
+                        error_info = None
+                        if self.state.consecutive_failures == 3:
+                            error_info = {
+                                    "errorCount": self.state.consecutive_failures,
+                                    "errorType": "ACTION_EXECUTION_ERROR",
+                                    "errorMessage": error_message
+                                }
+                    
+                            # Send single websocket message with all data
+                            await self._send_message("AGENT_GOAL_STOP_RES", {
+                                "requestId": self.requestId,
+                                "testCaseId": self.testCaseId,
+                                "success": False,
+                                "error": json.dumps(error_info) if error_info else None,
+                            })
+                            break
 
                 if self.state.stopped:
                     logger.info('Agent stopped')
@@ -463,6 +450,7 @@ class SupatestAgent(Agent[Context]):
                     await self.log_completion()
                     break
             else:
+                # unable to complete task in max steps ERROR
                 logger.info('❌ Failed to complete task in maximum steps')
                 if self.send_message:
                     await self._send_message("ERROR", "The agent was unable to complete the task within the allowed number of steps.")
@@ -498,6 +486,7 @@ class SupatestAgent(Agent[Context]):
     async def multi_act(
         self,
         actions: Sequence[SupatestActionModel],
+        subgoal_id: str,
         check_for_new_elements: bool = True,
     ) -> list[SupatestActionResult]:
         """Execute multiple actions with SupatestActionModel type"""
@@ -524,8 +513,14 @@ class SupatestAgent(Agent[Context]):
                     isExecuted = 'failure'
                     step = action.model_dump(exclude_none=True)
                     steps = await self._send_action_update(step, isExecuted, steps)
-                    msg = f'Something new appeared after action {i} / {len(actions)}'
+                    msg = f'Something new appeared after step {i} / {len(actions)}'
                     logger.info(msg)
+                    error_info = {
+                        "errorCount": 1,
+                        "errorType": "NEW_ELEMENTS_ERROR",
+                        "errorMessage": msg
+                    }
+                    await self._send_subgoal_update(subgoal_id, True, error_info=error_info)
                     results.append(SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='failure'))
                     break
 
@@ -541,8 +536,19 @@ class SupatestAgent(Agent[Context]):
             )
 
             isExecuted = result.isExecuted 
-            step = action.model_dump(exclude_none=True)  
-
+            step = action.model_dump(exclude_none=True)
+            
+            if(result.error):
+                error_info = {
+                    "errorCount": self.state.consecutive_failures,
+                    "errorType": "ACTION_EXECUTION_ERROR",
+                    "errorMessage": result.error
+                }
+                await self._send_subgoal_update(subgoal_id, True, error_info=error_info)
+            
+            
+            
+            # TODO: send the update of execution  and if error occurs send that also
             
             # Send update that the action has been executed with the result
             # The key change: update the steps variable with the returned updated steps
@@ -559,6 +565,8 @@ class SupatestAgent(Agent[Context]):
         return results
 
 
+
+# ALL SUPATEST CUSTOM METHODS
     async def _send_action_update(self, action, is_executed: str, steps: list[dict]) -> list[dict]:
         """
         Send action execution status update via websocket
@@ -611,11 +619,67 @@ class SupatestAgent(Agent[Context]):
             self.consecutive_eval_failure += 1
         else:
             self.consecutive_eval_failure = 0
+        
+    async def _send_message(self, message_type: str, message_data: Any) -> None:
+        """Send websocket messages if send_message callback is configured"""
+        if not self.send_message:
+            return
+            
+        try:
+            message = {
+                "type": message_type,
+                "goalId": self.goal_step_id,
+                "message": message_data if isinstance(message_data, dict) else {"message": str(message_data)}
+            }
+            await self.send_message(message)
+        except Exception as e:
+            logger.warning(f"Failed to send message: {str(e)}")   
+            
+    async def _send_subgoal_update(self, subgoal_id: str, is_error: bool, model_output: Optional[SupatestAgentOutput] = None, error_info: Optional[dict] = None) -> None:
+        """Send subgoal update via websocket
+        
+        Args:
+            subgoal_id: Unique identifier for the subgoal
+            is_error: Flag indicating if this update is for an error
+            model_output: The model output containing action and state info (required if is_error=False)
+            error_info: Error information dictionary (required if is_error=True)
+        """
+        
+        if self.send_message:
+            subgoal_id_str = str(subgoal_id)
+            if is_error:
+                logger.info(f"📤 [ERROR] sending subgoal error update for {subgoal_id_str}")
+                if not error_info:
+                    raise ValueError("error_info is required when is_error=True")
+                    
+                await self._send_message("AGENT_SUB_GOAL_UPDATE", {
+                    "subgoalId": subgoal_id_str,
+                    "pageSummary": None,
+                    "eval": None,
+                    "memory": None,
+                    "nextGoal": None,
+                    "thought": None,
+                    "steps": [],
+                    "error": [error_info]
+                })
+            else:
+                logger.info(f"📤 [ACTION-PLAN] sending subgoal update for {subgoal_id_str}")
+                if not model_output:
+                    raise ValueError("model_output is required when is_error=False")
+                    
+                steps = []
+                for i, action in enumerate(model_output.action):
+                    step = action.model_dump(exclude_none=True)
+                    steps.append(step)
 
-    async def _handle_step_error(self, e: Exception) -> list[SupatestActionResult]:
-        error_str = str(e)
-        return [SupatestActionResult(
-            error=error_str,
-            include_in_memory=True,
-            isExecuted='failure'
-        )]
+                await self._send_message("AGENT_SUB_GOAL_UPDATE", {
+                    "subgoalId": subgoal_id_str,
+                    "pageSummary": model_output.current_state.page_summary,
+                    "eval": model_output.current_state.evaluation_previous_goal,
+                    "memory": model_output.current_state.memory,
+                    "nextGoal": model_output.current_state.next_goal,
+                    "thought": model_output.current_state.thought,
+                    "steps": steps,
+                    "error": None
+                })
+
