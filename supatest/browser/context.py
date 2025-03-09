@@ -173,7 +173,6 @@ class SupatestBrowserContext(BrowserContext):
         if not isinstance(element, SupatestDOMElementNode):
             logger.error(f"[Supatest] Element at index {index} is not a SupatestDOMElementNode: {type(element)}")
             raise ValueError(f'Element at index {index} is not a SupatestDOMElementNode')
-        logger.debug(f"[Supatest] Found element: {element}, supatest_locator_id: {element.supatest_locator_id}")
         return element
 
     async def get_state(self) -> SupatestBrowserState:

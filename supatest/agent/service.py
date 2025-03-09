@@ -177,16 +177,6 @@ class SupatestAgent(Agent[Context]):
         if parsed is None:
             raise ValueError('Could not parse response.')
         
-        state = await self.browser_context.get_state()
-        
-        # Add supatest locator IDs to actions
-        for action in parsed.action:
-            index = action.get_index()
-            if index is not None and index in state.selector_map:
-                element = state.selector_map[index]
-                if element.supatest_locator_id:
-                    action.set_supatest_locator_id(element.supatest_locator_id)
-
         parsed.action = parsed.action[: self.settings.max_actions_per_step]
         self.state.n_steps += 1
 
@@ -627,7 +617,6 @@ class SupatestAgent(Agent[Context]):
                 
                 # Match both the action type and the action details (using ID or other unique identifiers)
                 if (step_type == action_type and 
-                    step_details.get('supatest_locator_id') == action_details.get('supatest_locator_id') and
                     step_details.get('index') == action_details.get('index')):
                     step[step_type]['isExecuted'] = is_executed
                     if action_details.get('locator'):

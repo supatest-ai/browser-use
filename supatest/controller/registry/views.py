@@ -29,20 +29,6 @@ class SupatestActionModel(BaseModel):
         if hasattr(action_params, 'index'):
             action_params.index = index
 
-    def set_supatest_locator_id(self, supatest_locator_id: str):
-        """Set the supatest_locator_id for the action"""
-        # Get the action name and params
-        action_data = self.model_dump(exclude_unset=True)
-        if not action_data:
-            return
-            
-        action_name = next(iter(action_data.keys()))
-        action_params = getattr(self, action_name)
-        
-        # Set the supatest_locator_id directly on the model
-        if hasattr(action_params, 'supatest_locator_id'):
-            action_params.supatest_locator_id = supatest_locator_id
-
     def set_locator(self, locator: str):
         """Set the locator for the action"""
         # Get the action name and params
