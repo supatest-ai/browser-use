@@ -32,7 +32,7 @@ from browser_use.telemetry.views import AgentEndTelemetryEvent, AgentStepTelemet
 from browser_use.agent.views import AgentStepInfo, StepMetadata, AgentHistoryList
 from browser_use.agent.prompts import SystemPrompt, AgentMessagePrompt
 from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
-from browser_use.browser.views import  BrowserStateHistory
+from browser_use.browser.views import  BrowserError, BrowserStateHistory
 
 from supatest.agent.views import SupatestAgentOutput, SupatestAgentBrain,SupatestAgentHistory, SupatestAgentHistoryList, SupatestActionResult
 from supatest.controller.registry.views import SupatestActionModel
@@ -41,6 +41,7 @@ from supatest.browser.browser import SupatestBrowser
 from supatest.browser.context import SupatestBrowserContext
 from supatest.browser.views import SupatestBrowserState
 from supatest.controller.service import SupatestController
+from importlib import resources
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,8 @@ class SupatestAgent(Agent[Context]):
             state=self.state.message_manager_state,
         )
         
+        self.locator_js_code = resources.read_text('supatest.agent', 'locator.js')
+
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended AgentOutput"""
         self.ActionModel = self.controller.registry.create_action_model()
@@ -167,7 +170,7 @@ class SupatestAgent(Agent[Context]):
             parsed: SupatestAgentOutput | None = response['parsed']
         else:
             structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
-            logger.info(f"🤖 Calling LLM with messages: {input_messages}")
+            logger.debug(f"🤖 Calling LLM with messages: {input_messages}")
             response: dict[str, Any] = await structured_llm.ainvoke(input_messages)
             parsed: SupatestAgentOutput | None = response['parsed']
 
@@ -525,6 +528,30 @@ class SupatestAgent(Agent[Context]):
                     break
 
             await self._raise_if_stopped_or_paused()
+
+            # For actions that have an index, we need to get the element node to extract the locators
+            element_node = None
+            action_index = action.get_index()
+            if action_index is not None:
+                if action_index not in await self.browser_context.get_selector_map():
+                    message = f'Element index {action_index} does not exist - retry or use alternative actions'
+                    SupatestActionResult(error=message, isExecuted='failure')
+                    raise Exception(message)
+                
+                element_node = await self.browser_context.get_dom_element_by_index(action_index)
+                if element_node is None:
+                    raise Exception(f'Element index {action_index} does not exist - retry or use alternative actions')
+                logger.debug(f'Element node: {element_node}')
+            
+                element_handle = await self.browser_context.get_locate_element(element_node)
+                if element_handle is None:
+                    raise BrowserError(f'Element: {repr(element_node)} not found')
+                
+                eval_element = await element_handle.evaluate(self.locator_js_code)
+                locator = eval_element['locator']
+                all_locators = eval_element['allLocators']
+                logger.info(f'Locator: {locator}')
+                logger.info(f'All locators: {all_locators}')
 
             result = await self.controller.act(
                 action,
