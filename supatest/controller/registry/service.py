@@ -133,6 +133,8 @@ class SupatestRegistry(Registry[Context]):
 
         except Exception as e:
             raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e
+        
+    def _replace_sensitive_data(self, params: BaseModel, sensitive_data: Dict[str, str]) -> BaseModel:
 
         """Replaces the sensitive data in the params"""
         # if there are any str with <secret>placeholder</secret> in the params, replace them with the actual value from sensitive_data
