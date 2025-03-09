@@ -405,11 +405,21 @@
   }
 
   const locator = getUniqueSelector(domElement);
-  const allLocators = getAllUniqueSelectors(domElement);
+  let allUniqueLocators = [];
+  if (locator) {
+    allUniqueLocators = getAllUniqueSelectors(domElement);
+    if (allUniqueLocators.length > 0) {
+      allUniqueLocators.forEach((otherLocator) => {
+        if (otherLocator.locatorValue === locator) {
+          otherLocator.isSelected = true;
+        }
+      });
+    }
+  }
 
   // Return public API
   return {
     locator,
-    allLocators,
+    allUniqueLocators,
   };
 };
