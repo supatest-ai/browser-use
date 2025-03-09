@@ -532,6 +532,8 @@ class SupatestAgent(Agent[Context]):
             # For actions that have an index, we need to get the element node to extract the locators
             element_node = None
             action_index = action.get_index()
+            locator: str | None = None
+            all_unique_locators: list[dict] | None = None
             if action_index is not None:
                 if action_index not in await self.browser_context.get_selector_map():
                     message = f'Element index {action_index} does not exist - retry or use alternative actions'
@@ -550,8 +552,8 @@ class SupatestAgent(Agent[Context]):
                 eval_element = await element_handle.evaluate(self.locator_js_code)
                 locator = eval_element['locator']
                 all_unique_locators = eval_element['allUniqueLocators']
-                logger.info(f'Locator: {locator}')
-                logger.info(f'All Unique Locators: {all_unique_locators}')
+                logger.debug(f'Locator: {locator}')
+                logger.debug(f'All Unique Locators: {all_unique_locators}')
 
             result = await self.controller.act(
                 action,
@@ -563,6 +565,10 @@ class SupatestAgent(Agent[Context]):
             )
 
             isExecuted = result.isExecuted 
+            if locator and all_unique_locators:
+                action.set_locator(locator)
+                action.set_all_unique_locators(all_unique_locators)
+
             step = action.model_dump(exclude_none=True)
             
             if(result.error):
@@ -624,11 +630,14 @@ class SupatestAgent(Agent[Context]):
                     step_details.get('supatest_locator_id') == action_details.get('supatest_locator_id') and
                     step_details.get('index') == action_details.get('index')):
                     step[step_type]['isExecuted'] = is_executed
+                    if action_details.get('locator'):
+                        step[step_type]['locator'] = action_details.get('locator')
+                    if action_details.get('allUniqueLocators'):
+                        step[step_type]['allUniqueLocators'] = action_details.get('allUniqueLocators')  
                     break
 
 
             simplified_steps = [list(step.values())[0] for step in steps]
-
             # Send the updated steps via websocket
             await self._send_message("AGENT_STEP_EXECUTED", {
                 "steps": simplified_steps
