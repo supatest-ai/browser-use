@@ -10,21 +10,17 @@ from browser_use.dom.views import (
 @dataclass(frozen=False)
 class SupatestDOMElementNode(DOMElementNode):
     """
-    Extended version of DOMElementNode that includes supatest_locator_id.
+    Extended version of DOMElementNode.
     xpath: the xpath of the element from the last root node (shadow root or iframe OR document if no shadow root or iframe).
     To properly reference the element we need to recursively switch the root node until we find the element (work you way up the tree with `.parent`)
     """
-    supatest_locator_id: Optional[str] = None
 
     def __repr__(self) -> str:
         tag_str = f'<{self.tag_name}'
 
-        # Add attributes including supatest_locator_id if present
         for key, value in self.attributes.items():
             tag_str += f' {key}="{value}"'
-        if self.supatest_locator_id:
-            tag_str += f' supatest_locator_id="{self.supatest_locator_id}"'
-        tag_str += '>'
+       
 
         # Add extra info
         extras = []

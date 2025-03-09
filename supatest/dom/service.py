@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class SupatestDomService(DomService):
     def __init__(self, page: 'Page'):
         super().__init__(page)
-        # Use the original buildDomTree.js from browser_use since we've added supatest_locator_id there
+        # Use the original buildDomTree.js from browser_use
         self.js_code = resources.read_text('browser_use.dom', 'buildDomTree.js')
 
     @time_execution_async('--get_clickable_elements')
@@ -36,8 +36,6 @@ class SupatestDomService(DomService):
         supatest_tree = cast(SupatestDOMElementNode, element_tree)
         supatest_map = cast(Dict[int, SupatestDOMElementNode], selector_map)
         logger.debug(f"[Supatest] Found {len(supatest_map)} clickable elements")
-        for idx, element in supatest_map.items():
-            logger.debug(f"[Supatest] Element {idx}: {element}, supatest_locator_id: {element.supatest_locator_id}")
         return SupatestDOMState(element_tree=supatest_tree, selector_map=supatest_map)
 
     @time_execution_async('--build_dom_tree')
@@ -182,7 +180,6 @@ class SupatestDomService(DomService):
             viewport_coordinates=viewport_coordinates,
             page_coordinates=page_coordinates,
             viewport_info=viewport_info,
-            supatest_locator_id=node_data.get('attributes', {}).get('supatest_locator_id')
         )
 
         children_ids = node_data.get('children', [])

@@ -95,16 +95,8 @@ class SupatestController(Controller[Context]):
         @self.registry.action('Click element', param_model=ClickElementAction)
         async def click_element(params: ClickElementAction, browser: SupatestBrowserContext):
             session = await browser.get_session()
-            # Try to find element by supatest_locator_id first if provided
             element_node = None
-            if params.supatest_locator_id:
-                state = await browser.get_state()
-                for node in state.selector_map.values():
-                    if node.supatest_locator_id == params.supatest_locator_id:
-                        element_node = node
-                        break
 
-            # Fall back to index if no element found by supatest_locator_id
             if element_node is None:
                 if params.index not in await browser.get_selector_map():
                     message = f'Element with index {params.index} does not exist - retry or use alternative actions'
@@ -124,8 +116,6 @@ class SupatestController(Controller[Context]):
                     msg = f'💾  Downloaded file to {download_path}'
                 else:
                     msg = f'🖱️  Clicked element with index {params.index}'
-                    if params.supatest_locator_id:
-                        msg += f' (supatest_id: {params.supatest_locator_id})'
                     msg += f': {element_node.get_all_text_till_next_clickable_element(max_depth=2)}'
 
                 logger.info(msg)
@@ -143,16 +133,7 @@ class SupatestController(Controller[Context]):
 
         @self.registry.action('Input text into an interactive element', param_model=InputTextAction)
         async def input_text(params: InputTextAction, browser: SupatestBrowserContext, has_sensitive_data: bool = False):
-            # Try to find element by supatest_locator_id first if provided
             element_node = None
-            if params.supatest_locator_id:
-                state = await browser.get_state()
-                for node in state.selector_map.values():
-                    if node.supatest_locator_id == params.supatest_locator_id:
-                        element_node = node
-                        break
-
-            # Fall back to index if no element found by supatest_locator_id
             if element_node is None:
                 if params.index not in await browser.get_selector_map():
                     message = f'Element index {params.index} does not exist - retry or use alternative actions'
@@ -164,16 +145,10 @@ class SupatestController(Controller[Context]):
             
             if not has_sensitive_data:
                 msg = f'⌨️  Input {params.text} into element'
-                if params.supatest_locator_id:
-                    msg += f' (supatest_id: {params.supatest_locator_id})'
-                else:
-                    msg += f' with index {params.index}'
+                msg += f' with index {params.index}'
             else:
                 msg = f'⌨️  Input sensitive data into element'
-                if params.supatest_locator_id:
-                    msg += f' (supatest_id: {params.supatest_locator_id})'
-                else:
-                    msg += f' with index {params.index}'
+                msg += f' with index {params.index}'
 
             logger.info(msg)
             logger.debug(f'Element xpath: {element_node.xpath}')

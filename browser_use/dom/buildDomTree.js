@@ -79,26 +79,6 @@
       }
     : null;
 
-  function generateSupatestLocatorId() {
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      function (c) {
-        const r = (Math.random() * 16) | 0;
-        const v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      }
-    );
-  }
-
-  function setSupatestLocatorId(element) {
-    if (element.getAttribute("supatest_locator_id")) {
-      return;
-    }
-
-    const id = `${generateSupatestLocatorId()}`;
-    element.setAttribute("supatest_locator_id", id);
-  }
-
   // Simple timing helper that only runs in debug mode
   function measureTime(fn) {
     if (!debugMode) return fn;
@@ -1012,13 +992,6 @@
         if (nodeData.isTopElement) {
           nodeData.isInteractive = isInteractiveElement(node);
           if (nodeData.isInteractive) {
-            setSupatestLocatorId(node);
-            nodeData.attributes = nodeData.attributes || {};
-            if (!nodeData.attributes["supatest_locator_id"]) {
-              nodeData.attributes["supatest_locator_id"] = node.getAttribute(
-                "supatest_locator_id"
-              );
-            }
             nodeData.isInViewport = true;
             nodeData.highlightIndex = highlightIndex++;
 

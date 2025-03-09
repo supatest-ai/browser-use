@@ -24,7 +24,6 @@ class ClickElementAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     index: int
     xpath: Optional[str] = None
-    supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
     locator: Optional[str] = None
@@ -35,7 +34,6 @@ class InputTextAction(BaseModel):
     index: int
     text: str
     xpath: Optional[str] = None
-    supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
     locator: Optional[str] = None
@@ -77,7 +75,6 @@ class SelectDropdownOptionAction(BaseModel):
     index: int
     text: str
     xpath: Optional[str] = None
-    supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
     locator: Optional[str] = None
@@ -87,7 +84,6 @@ class GetDropdownOptionsAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     index: int
     xpath: Optional[str] = None
-    supatest_locator_id: Optional[str] = None
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
 
