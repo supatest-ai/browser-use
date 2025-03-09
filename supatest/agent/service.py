@@ -549,9 +549,9 @@ class SupatestAgent(Agent[Context]):
                 
                 eval_element = await element_handle.evaluate(self.locator_js_code)
                 locator = eval_element['locator']
-                all_locators = eval_element['allLocators']
+                all_unique_locators = eval_element['allUniqueLocators']
                 logger.info(f'Locator: {locator}')
-                logger.info(f'All locators: {all_locators}')
+                logger.info(f'All Unique Locators: {all_unique_locators}')
 
             result = await self.controller.act(
                 action,
