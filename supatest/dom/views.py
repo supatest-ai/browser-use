@@ -8,27 +8,17 @@ from browser_use.dom.views import (
     SelectorMap,
     ViewportInfo,
     CoordinateSet,
+    DOMElementNode,
 )
 
 
 @dataclass(frozen=False)
-class SupatestDOMElementNode(DOMBaseNode):
+class SupatestDOMElementNode(DOMElementNode):
     """
     Extended version of DOMElementNode that includes supatest_locator_id.
     xpath: the xpath of the element from the last root node (shadow root or iframe OR document if no shadow root or iframe).
     To properly reference the element we need to recursively switch the root node until we find the element (work you way up the tree with `.parent`)
     """
-    tag_name: str
-    xpath: str
-    attributes: Dict[str, str]
-    children: List[DOMBaseNode]
-    is_interactive: bool = False
-    is_top_element: bool = False
-    shadow_root: bool = False
-    highlight_index: Optional[int] = None
-    viewport_coordinates: Optional[CoordinateSet] = None
-    page_coordinates: Optional[CoordinateSet] = None
-    viewport_info: Optional[ViewportInfo] = None
     supatest_locator_id: Optional[str] = None
 
     def __repr__(self) -> str:
