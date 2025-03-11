@@ -46,14 +46,15 @@ Interactive Elements
    }}
 
 2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {max_actions} actions per sequence.
-   Every action MUST include a "title" field that describes what the action does.
-   Each action model now includes an 'isExecuted' field, which defaults to 'false'. This indicates that the action has not yet been executed.
+   Every action MUST include a "title" field that describes what the action does. The title should be meaningful and should capture what that action is doing. If the action requires to enter a certain value, then the title should include what value is being entered and where.
+   e.g: [{{"input_text": {{"index": 1, "text": "Company_name_123", "title": "Fill Company_name_123 in the company input field"}}}}]. The title should be formulated in such a way that it is self-explanatory for what the action is really doing. Be concise but do not compensate for valuable information.
+   Each action model also includes an 'isExecuted' field, which defaults to 'false'. This indicates that the action has not yet been executed.
    If the context receives 'isExecuted' as 'true', it means that the action is currently being executed.
 
    Common action sequences:
 
-- Form filling: [{{"input_text": {{"index": 1, "text": "username", "title": "Enter username"}}}}, {{"input_text": {{"index": 2, "text": "password", "title": "Enter password"}}}}, {{"click_element": {{"index": 3, "title": "Click login button"}}}}]
-- Navigation and extraction: [{{"go_to_url": {{"url": "https://example.com", "title": "Navigate to example.com"}}}}, {{"extract_content": {{"goal": "extract the names"}}}}]
+- Form filling: [{{"input_text": {{"index": 1, "text": "random_user_1", "title": "Enter 'random_use_1' for username"}}}}, {{"input_text": {{"index": 2, "text": "my_valid_password", "title": "Enter my_valid_password in password field"}}}}, {{"click_element": {{"index": 3, "title": "Click login button"}}}}]
+- Navigation: [{{"go_to_url": {{"url": "https://example.com", "title": "Navigate to example.com"}}}}]
 - Actions are executed in the given order
 - If the page changes after an action, the sequence is interrupted and you get the new state.
 - If the page changes after an action, and is empty (may be the page is still loading) or has partially loaded, then add a 'wait' action and proceed accordingly.
