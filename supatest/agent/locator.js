@@ -233,7 +233,6 @@
         "alt",
         "type",
         "href",
-        "value",
         "role",
       ],
       includeTag: true,

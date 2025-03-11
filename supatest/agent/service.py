@@ -535,6 +535,7 @@ class SupatestAgent(Agent[Context]):
                     raise Exception(f'Element index {action_index} does not exist - retry or use alternative actions')
                 logger.debug(f'Element node: {element_node}')
             
+                logger.debug(f'Element node: {element_node}')
                 element_handle = await self.browser_context.get_locate_element(element_node)
                 if element_handle is None:
                     raise BrowserError(f'Element: {repr(element_node)} not found')
