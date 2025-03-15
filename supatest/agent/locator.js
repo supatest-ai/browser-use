@@ -1,39 +1,76 @@
 (domElement) => {
   // Utility functions
-  function escapeAttribute(str) {
-    return str.replace(/"/g, '\\"');
+  function escapeAttribute(value) {
+    return value
+      .replace(/\\/g, "\\\\") // Escape backslashes
+      .replace(/"/g, '\\"') // Escape double quotes
+      .replace(/'/g, "\\'") // Escape single quotes
+      .replace(/\n/g, "\\n") // Escape newlines
+      .replace(/\r/g, "\\r") // Escape carriage returns
+      .replace(/\f/g, "\\f"); // Escape form feeds
   }
 
-  function getElementTagName(element) {
-    return element.localName.toLowerCase();
-  }
-
-  // Dynamic ID/attribute detection
   function isDynamicId(id) {
-    const dynamicPatterns = [
-      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i, // UUID
-      /^[a-f0-9]{24}$/i, // MongoDB ObjectId
-      /^[a-f0-9]{32}$/i, // MD5
-      /^[0-9]+$/, // Pure numbers
-      /^[a-f0-9]{8,}$/i, // Long hex strings
-      /^[a-z0-9]{8,}$/i, // Long alphanumeric strings
-      /^[a-z0-9]+[-_][a-z0-9]+[-_][a-z0-9]+/i, // Multiple segments with random parts
+    const dynamicIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i; // UUID v4
+    const randomPattern = /:\w+:/; // Matches ':r4g:', ':abcd:', etc.
+    const longNumbersPattern = /^\d{10,}$/; // Detect long numeric IDs
+
+    // Additional common dynamic ID patterns
+    const reactPatterns = /^(rc[-_]|r[-_]|react[-_])/i; // React-related IDs
+    const commonPrefixes =
+      /^(ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_])/i; // Framework-generated IDs
+    const randomSuffixes = /[-_][a-z0-9]{4,}$/i; // Random suffixes like -x4f2 or _x4f2
+    const timeBasedIds = /\d{13,}$/; // Timestamp-based IDs (milliseconds)
+    const containsNumbers = /\d+/; // Match any ID containing numbers
+
+    return (
+      dynamicIdPattern.test(id) ||
+      randomPattern.test(id) ||
+      longNumbersPattern.test(id) ||
+      reactPatterns.test(id) ||
+      commonPrefixes.test(id) ||
+      randomSuffixes.test(id) ||
+      timeBasedIds.test(id) ||
+      containsNumbers.test(id)
+    );
+  }
+
+  function isDynamicClass(className) {
+    const utilityPattern = /^(w-|h-|bg-|text-|p-|m-)/; // Tailwind utility classes
+    const hashPattern = /^[a-f0-9]{8,}$/i; // Hash-like classes
+    const frameworkPatterns = [
+      /\bng-\w+\b/, // Angular
+      /\bjsx-\w+\b/, // React Styled-components
+      /\bcss-\w+\b/, // CSS modules
     ];
-    return dynamicPatterns.some((pattern) => pattern.test(id));
+
+    // Combine hash detection, framework patterns, and utility class detection
+    return (
+      hashPattern.test(className) ||
+      frameworkPatterns.some((pattern) => pattern.test(className)) ||
+      utilityPattern.test(className)
+    );
   }
 
-  function isDynamicAttr(attrName, attrValue) {
-    return isDynamicId(attrValue);
+  function isDynamicAttr(name, value) {
+    if (name === "id") {
+      return isDynamicId(value);
+    } else if (name === "class") {
+      return isDynamicClass(value);
+    }
+    return false;
   }
 
-  // Selector uniqueness checking
   function isUniqueCSSSelector(element, selector, logErrors = false) {
     try {
-      const matches = document.querySelectorAll(selector);
-      return matches.length === 1 && matches[0] === element;
+      const elements = Array.from(document.querySelectorAll(selector));
+      if (elements.length === 1 && elements[0] === element) {
+        return true;
+      }
+      return false;
     } catch (error) {
       if (logErrors) {
-        console.error(`Invalid selector: ${selector}`, error);
+        console.error("Invalid selector:", selector, error);
       }
       return false;
     }
@@ -73,6 +110,10 @@
   }
 
   // CSS selector generation
+  function getElementTagName(element) {
+    return element.localName.toLowerCase();
+  }
+
   function getAttributeSelector(element, attributes, includeTag = true) {
     if (!attributes) return null;
 
@@ -93,8 +134,7 @@
 
   function getElementSelector(element, options) {
     const { dataAttributes, nameAttributes, customAttrFallback } = options;
-
-    // Try using ID
+    // 1. Try using ID
     if (element.id && !isDynamicId(element.id)) {
       const idSelector = `#${CSS.escape(element.id)}`;
       if (isUniqueCSSSelector(element, idSelector)) {
@@ -102,13 +142,13 @@
       }
     }
 
-    // Try using a single stable data attribute
+    // 2. Try using a single stable data attribute
     const dataAttributeSelector = getAttributeSelector(element, dataAttributes);
     if (dataAttributeSelector) {
       return dataAttributeSelector;
     }
 
-    // Try using a single stable aria or name attribute
+    // 3. Try using a single stable aria or name attribute
     const otherAttributes = [
       ...(nameAttributes || []),
       ...(customAttrFallback || []),
@@ -121,6 +161,7 @@
       return otherAttributeSelector;
     }
 
+    // 5. Return null if no unique selector is found
     return null;
   }
 
@@ -140,6 +181,337 @@
 
     const index = sameTypeSiblings.indexOf(element) + 1;
     return `${tagName}:nth-of-type(${index})`;
+  }
+
+  function getUniqueCssSelector(element, options) {
+    let currentElement = element;
+    let depth = 0;
+    const selectors = [];
+
+    const maxDepth = options.maxDepth || 6;
+    while (currentElement && depth < maxDepth) {
+      const selector = getElementSelector(currentElement, options);
+      if (selector) {
+        if (isUniqueCSSSelector(element, selector, options.logErrors)) {
+          return selector;
+        }
+        selectors.unshift(selector);
+      } else {
+        const nthOfTypeSelector = getNthOfTypeSelector(currentElement);
+        selectors.unshift(nthOfTypeSelector);
+      }
+
+      const combinedSelector = selectors.join(" > ");
+      if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
+        return combinedSelector;
+      }
+
+      const parent = currentElement.parentElement;
+      if (!parent) break;
+      currentElement = parent;
+      depth++;
+    }
+
+    // If we've traversed up to the maximum depth, try the combined selector
+    const finalSelector = selectors.join(" > ");
+    if (isUniqueCSSSelector(element, finalSelector, options.logErrors)) {
+      return finalSelector;
+    }
+
+    return null;
+  }
+
+  function getAllAttributeSelectors(element, attributes, includeTag = true) {
+    if (!attributes) return [];
+
+    const selectors = [];
+    for (const attrName of attributes) {
+      const attrValue = element.getAttribute(attrName);
+      if (attrValue && !isDynamicAttr(attrName, attrValue)) {
+        const attrSelector = `[${attrName}="${escapeAttribute(attrValue)}"]`;
+        const selector = includeTag
+          ? `${getElementTagName(element)}${attrSelector}`
+          : attrSelector;
+        if (isUniqueCSSSelector(element, selector)) {
+          selectors.push(selector);
+        }
+      }
+    }
+    return selectors;
+  }
+
+  function getAllElementSelectors(element, options) {
+    const selectors = [];
+    const { dataAttributes, nameAttributes, customAttrFallback } = options;
+    // 1. Try using ID
+    if (element.id && !isDynamicId(element.id)) {
+      const idSelector = `#${CSS.escape(element.id)}`;
+      if (isUniqueCSSSelector(element, idSelector)) {
+        selectors.push(idSelector);
+      }
+    }
+
+    // 2. Try using a single stable data attribute
+    const dataAttributeSelectors = getAllAttributeSelectors(
+      element,
+      dataAttributes
+    );
+    if (dataAttributeSelectors.length > 0) {
+      selectors.push(...dataAttributeSelectors);
+    }
+
+    // 3. Try using a single stable aria or name attribute
+    const otherAttributes = [
+      ...(nameAttributes || []),
+      ...(customAttrFallback || []),
+    ];
+    const otherAttributeSelectors = getAllAttributeSelectors(
+      element,
+      otherAttributes
+    );
+    if (otherAttributeSelectors.length > 0) {
+      selectors.push(...otherAttributeSelectors);
+    }
+
+    return selectors;
+  }
+
+  function getAllUniqueCssSelectors(element, options) {
+    const allUniqueSelectors = new Set();
+
+    const maxDepth = options.maxDepth || 6;
+
+    // Get all possible selectors for the initial element
+    const initialSelectors = getAllElementSelectors(element, options);
+
+    // Initialize paths
+    let paths = [];
+
+    // Handle initial selectors
+    if (initialSelectors.length > 0) {
+      for (const selector of initialSelectors) {
+        if (isUniqueCSSSelector(element, selector, options.logErrors)) {
+          allUniqueSelectors.add(selector);
+        }
+        paths.push({
+          selectors: [selector],
+          currentElement: element.parentElement,
+          depth: 1,
+        });
+      }
+    } else {
+      // Use nth-of-type selector if no other selectors are available
+      const nthOfTypeSelector = getNthOfTypeSelector(element);
+      if (isUniqueCSSSelector(element, nthOfTypeSelector, options.logErrors)) {
+        allUniqueSelectors.add(nthOfTypeSelector);
+      }
+      paths.push({
+        selectors: [nthOfTypeSelector],
+        currentElement: element.parentElement,
+        depth: 1,
+      });
+    }
+
+    // Process paths
+    while (paths.length > 0) {
+      const newPaths = [];
+
+      for (const path of paths) {
+        const combinedSelector = path.selectors.join(" > ");
+        if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
+          allUniqueSelectors.add(combinedSelector);
+        }
+
+        // Stop if maximum depth is reached or no parent exists
+        if (path.depth >= maxDepth || !path.currentElement) {
+          continue;
+        }
+
+        const parentElement = path.currentElement;
+        const parentSelectors = getAllElementSelectors(parentElement, options);
+
+        if (parentSelectors.length > 0) {
+          for (const parentSelector of parentSelectors) {
+            const newSelectors = [parentSelector, ...path.selectors];
+            newPaths.push({
+              selectors: newSelectors,
+              currentElement: parentElement.parentElement,
+              depth: path.depth + 1,
+            });
+          }
+        } else {
+          // Use nth-of-type selector for the parent if no other selectors are available
+          const parentNthOfTypeSelector = getNthOfTypeSelector(parentElement);
+          const newSelectors = [parentNthOfTypeSelector, ...path.selectors];
+          newPaths.push({
+            selectors: newSelectors,
+            currentElement: parentElement.parentElement,
+            depth: path.depth + 1,
+          });
+        }
+      }
+
+      paths = newPaths;
+    }
+
+    return Array.from(allUniqueSelectors);
+  }
+
+  function getUniqueSelector(element, options = {}) {
+    if (!(element instanceof Element)) return null;
+
+    // Configuration with default values
+    const {
+      maxDepth = 6, // Adjusted max depth
+      dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa"],
+      nameAttributes = [
+        "name",
+        "title",
+        "placeholder",
+        "alt",
+        "type",
+        "href",
+        "role",
+      ],
+      includeTag = true,
+      logErrors = false,
+      customAttrFallback = [
+        "data-pixel-component",
+        "data-row-col",
+        "data-name",
+        "data-icon-name",
+        "data-icon",
+        "data-cy",
+        "data-node-key",
+        "data-id",
+        "data-menu-xmlid",
+      ],
+    } = options;
+
+    const cssSelector = getUniqueCssSelector(element, {
+      maxDepth,
+      dataAttributes,
+      nameAttributes,
+      includeTag,
+      logErrors,
+      customAttrFallback,
+    });
+    if (cssSelector) {
+      return cssSelector.replace(/\\/g, "\\\\");
+    }
+
+    // Fallback to text selector if css selector is not available
+    if (
+      !EXCLUDE_TEXT_SELECTOR_TAGS.includes(element.tagName.toLowerCase()) &&
+      !element.closest("svg")
+    ) {
+      const textContent = element.textContent?.trim();
+      if (
+        textContent &&
+        textContent.length > 0 &&
+        textContent.length < 100 &&
+        isUniqueTextContent(element, textContent)
+      ) {
+        return `text=${escapeAttribute(textContent)}`;
+      }
+    }
+
+    // If no unique CSS selector and/or text selector is found, use XPath generation
+    const xpathSelector = getXPath(element, {
+      logErrors,
+      dataAttributes,
+      nameAttributes,
+      customAttrFallback,
+    });
+    if (xpathSelector) {
+      return `xpath=${xpathSelector}`;
+    }
+
+    // If all methods fail, return null
+    return null;
+  }
+
+  function getAllUniqueSelectors(element, options = {}) {
+    if (!(element instanceof Element)) return [];
+
+    // Configuration with default values
+    const {
+      maxDepth = 6, // Adjusted max depth
+      dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa"],
+      nameAttributes = [
+        "name",
+        "title",
+        "placeholder",
+        "alt",
+        "type",
+        "href",
+        "role",
+      ],
+      includeTag = true,
+      logErrors = false,
+      customAttrFallback = [
+        "data-pixel-component",
+        "data-row-col",
+        "data-name",
+        "data-icon-name",
+        "data-icon",
+        "data-cy",
+        "data-node-key",
+        "data-id",
+        "data-menu-xmlid",
+      ],
+    } = options;
+    const allSelectors = [];
+
+    const cssSelectors = getAllUniqueCssSelectors(element, {
+      maxDepth,
+      dataAttributes,
+      nameAttributes,
+      includeTag,
+      logErrors,
+      customAttrFallback,
+    });
+
+    if (cssSelectors.length > 0) {
+      cssSelectors.forEach((cssSelector) => {
+        const modifiedSelector = cssSelector.replace(/\\/g, "\\\\");
+        allSelectors.push(modifiedSelector);
+      });
+    }
+
+    // Fallback to text selector if css selector is not available
+    if (
+      !EXCLUDE_TEXT_SELECTOR_TAGS.includes(element.tagName.toLowerCase()) &&
+      !element.closest("svg")
+    ) {
+      const textContent = element.textContent?.trim();
+      if (
+        textContent &&
+        textContent.length > 0 &&
+        textContent.length < 100 &&
+        isUniqueTextContent(element, textContent)
+      ) {
+        allSelectors.push(`text=${escapeAttribute(textContent)}`);
+      }
+    }
+
+    // If no unique CSS selector and/or text selector is found, use XPath generation
+    const xpathSelector = getXPath(element, {
+      logErrors,
+      dataAttributes,
+      nameAttributes,
+      customAttrFallback,
+    });
+    if (xpathSelector) {
+      allSelectors.push(`xpath=${xpathSelector}`);
+    }
+
+    // If all methods fail, return null
+    const modifiedSelectors = allSelectors.map((selector) => ({
+      locatorValue: selector,
+      isSelected: false,
+    }));
+    return modifiedSelectors;
   }
 
   // XPath selector generation
@@ -219,44 +591,13 @@
     return "//" + steps.join("/");
   }
 
-  // Main selector functions
-  function getUniqueSelector(element, options = {}) {
-    if (!(element instanceof Element)) return null;
-
-    const defaultOptions = {
-      maxDepth: 6,
-      dataAttributes: ["data-test-id", "data-testid", "data-test", "data-qa"],
-      nameAttributes: [
-        "name",
-        "title",
-        "placeholder",
-        "alt",
-        "type",
-        "href",
-        "role",
-      ],
-      includeTag: true,
-      logErrors: false,
-      customAttrFallback: [
-        "data-pixel-component",
-        "data-row-col",
-        "data-name",
-        "data-icon-name",
-        "data-icon",
-        "data-cy",
-        "data-node-key",
-        "data-id",
-        "data-menu-xmlid",
-      ],
-    };
-
-    options = { ...defaultOptions, ...options };
+  function getUniqueCssSelector(element, options) {
     let currentElement = element;
     let depth = 0;
     const selectors = [];
 
-    // Try CSS selectors first
-    while (currentElement && depth < options.maxDepth) {
+    const maxDepth = options.maxDepth || 6;
+    while (currentElement && depth < maxDepth) {
       const selector = getElementSelector(currentElement, options);
       if (selector) {
         if (isUniqueCSSSelector(element, selector, options.logErrors)) {
@@ -279,128 +620,94 @@
       depth++;
     }
 
-    // Try text selector if CSS selector fails
-    if (
-      !EXCLUDE_TEXT_SELECTOR_TAGS.includes(element.tagName.toLowerCase()) &&
-      !element.closest("svg")
-    ) {
-      const textContent = element.textContent?.trim();
-      if (
-        textContent &&
-        textContent.length > 0 &&
-        textContent.length < 100 &&
-        isUniqueTextContent(element, textContent)
-      ) {
-        return `text=${escapeAttribute(textContent)}`;
-      }
-    }
-
-    // Try XPath as last resort
-    const xpathSelector = getXPath(element, options);
-    if (xpathSelector) {
-      return `xpath=${xpathSelector}`;
+    // If we've traversed up to the maximum depth, try the combined selector
+    const finalSelector = selectors.join(" > ");
+    if (isUniqueCSSSelector(element, finalSelector, options.logErrors)) {
+      return finalSelector;
     }
 
     return null;
   }
 
-  function getAllUniqueSelectors(element, options = {}) {
-    if (!(element instanceof Element)) return [];
+  function getAllUniqueCssSelectors(element, options) {
+    const allUniqueSelectors = new Set();
 
-    const defaultOptions = {
-      maxDepth: 6,
-      dataAttributes: ["data-test-id", "data-testid", "data-test", "data-qa"],
-      nameAttributes: [
-        "name",
-        "title",
-        "placeholder",
-        "alt",
-        "type",
-        "href",
-        "value",
-        "role",
-      ],
-      includeTag: true,
-      logErrors: false,
-      customAttrFallback: [
-        "data-pixel-component",
-        "data-row-col",
-        "data-name",
-        "data-icon-name",
-        "data-icon",
-        "data-cy",
-        "data-node-key",
-        "data-id",
-        "data-menu-xmlid",
-      ],
-    };
+    const maxDepth = options.maxDepth || 6;
 
-    options = { ...defaultOptions, ...options };
-    const allSelectors = new Set();
+    // Get all possible selectors for the initial element
+    const initialSelectors = getAllElementSelectors(element, options);
 
-    // Get CSS selectors
-    let currentElement = element;
-    let depth = 0;
-    const selectorPaths = [[]];
+    // Initialize paths
+    let paths = [];
 
-    while (currentElement && depth < options.maxDepth) {
+    // Handle initial selectors
+    if (initialSelectors.length > 0) {
+      for (const selector of initialSelectors) {
+        if (isUniqueCSSSelector(element, selector, options.logErrors)) {
+          allUniqueSelectors.add(selector);
+        }
+        paths.push({
+          selectors: [selector],
+          currentElement: element.parentElement,
+          depth: 1,
+        });
+      }
+    } else {
+      // Use nth-of-type selector if no other selectors are available
+      const nthOfTypeSelector = getNthOfTypeSelector(element);
+      if (isUniqueCSSSelector(element, nthOfTypeSelector, options.logErrors)) {
+        allUniqueSelectors.add(nthOfTypeSelector);
+      }
+      paths.push({
+        selectors: [nthOfTypeSelector],
+        currentElement: element.parentElement,
+        depth: 1,
+      });
+    }
+
+    // Process paths
+    while (paths.length > 0) {
       const newPaths = [];
 
-      for (const path of selectorPaths) {
-        const selector = getElementSelector(currentElement, options);
-        if (selector) {
-          const newPath = [selector, ...path];
-          const combinedSelector = newPath.join(" > ");
-          if (
-            isUniqueCSSSelector(element, combinedSelector, options.logErrors)
-          ) {
-            allSelectors.add(combinedSelector);
+      for (const path of paths) {
+        const combinedSelector = path.selectors.join(" > ");
+        if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
+          allUniqueSelectors.add(combinedSelector);
+        }
+
+        // Stop if maximum depth is reached or no parent exists
+        if (path.depth >= maxDepth || !path.currentElement) {
+          continue;
+        }
+
+        const parentElement = path.currentElement;
+        const parentSelectors = getAllElementSelectors(parentElement, options);
+
+        if (parentSelectors.length > 0) {
+          for (const parentSelector of parentSelectors) {
+            const newSelectors = [parentSelector, ...path.selectors];
+            newPaths.push({
+              selectors: newSelectors,
+              currentElement: parentElement.parentElement,
+              depth: path.depth + 1,
+            });
           }
-          newPaths.push(newPath);
+        } else {
+          // Use nth-of-type selector for the parent if no other selectors are available
+          const parentNthOfTypeSelector = getNthOfTypeSelector(parentElement);
+          const newSelectors = [parentNthOfTypeSelector, ...path.selectors];
+          newPaths.push({
+            selectors: newSelectors,
+            currentElement: parentElement.parentElement,
+            depth: path.depth + 1,
+          });
         }
-
-        const nthTypeSelector = getNthOfTypeSelector(currentElement);
-        const nthTypePath = [nthTypeSelector, ...path];
-        const nthTypeCombined = nthTypePath.join(" > ");
-        if (isUniqueCSSSelector(element, nthTypeCombined, options.logErrors)) {
-          allSelectors.add(nthTypeCombined);
-        }
-        newPaths.push(nthTypePath);
       }
 
-      selectorPaths.push(...newPaths);
-      const parent = currentElement.parentElement;
-      if (!parent) break;
-      currentElement = parent;
-      depth++;
+      paths = newPaths;
     }
 
-    // Add text selector if applicable
-    if (
-      !EXCLUDE_TEXT_SELECTOR_TAGS.includes(element.tagName.toLowerCase()) &&
-      !element.closest("svg")
-    ) {
-      const textContent = element.textContent?.trim();
-      if (
-        textContent &&
-        textContent.length > 0 &&
-        textContent.length < 100 &&
-        isUniqueTextContent(element, textContent)
-      ) {
-        allSelectors.add(`text=${escapeAttribute(textContent)}`);
-      }
-    }
-
-    // Add XPath selector
-    const xpathSelector = getXPath(element, options);
-    if (xpathSelector) {
-      allSelectors.add(`xpath=${xpathSelector}`);
-    }
-
-    return Array.from(allSelectors).map((selector) => ({
-      locatorValue: selector,
-      isSelected: false,
-    }));
+    return Array.from(allUniqueSelectors);
   }
 
   const locator = getUniqueSelector(domElement);
