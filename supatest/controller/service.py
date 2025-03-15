@@ -121,11 +121,11 @@ class SupatestController(Controller[Context]):
                 logger.info(msg)
                 logger.debug(f'Element xpath: {element_node.xpath}')
                 
-                if len(session.context.pages) > initial_pages:
-                    new_tab_msg = 'New tab opened - switching to it'
-                    msg += f' - {new_tab_msg}'
-                    logger.info(new_tab_msg)
-                    await browser.switch_to_tab(-1)
+                # if len(session.context.pages) > initial_pages:
+                #     new_tab_msg = 'New tab opened - switching to it'
+                #     msg += f' - {new_tab_msg}'
+                #     logger.info(new_tab_msg)
+                #     await browser.switch_to_tab(-1)
                 return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
             except Exception as e:
                 logger.warning(f'Element not clickable - most likely the page changed')
@@ -154,21 +154,21 @@ class SupatestController(Controller[Context]):
             logger.debug(f'Element xpath: {element_node.xpath}')
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
-        @self.registry.action('Switch tab', param_model=SwitchTabAction)
-        async def switch_tab(params: SwitchTabAction, browser: SupatestBrowserContext):
-            await browser.switch_to_tab(params.page_id)
-            page = await browser.get_current_page()
-            await page.wait_for_load_state()
-            msg = f'🔄  Switched to tab {params.page_id}'
-            logger.info(msg)
-            return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
+        # @self.registry.action('Switch tab', param_model=SwitchTabAction)
+        # async def switch_tab(params: SwitchTabAction, browser: SupatestBrowserContext):
+        #     await browser.switch_to_tab(params.page_id)
+        #     page = await browser.get_current_page()
+        #     await page.wait_for_load_state()
+        #     msg = f'🔄  Switched to tab {params.page_id}'
+        #     logger.info(msg)
+        #     return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
-        @self.registry.action('Open url in new tab', param_model=OpenTabAction)
-        async def open_tab(params: OpenTabAction, browser: SupatestBrowserContext):
-            await browser.create_new_tab(params.url)
-            msg = f'🔗  Opened new tab with {params.url}'
-            logger.info(msg)
-            return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
+        # @self.registry.action('Open url in new tab', param_model=OpenTabAction)
+        # async def open_tab(params: OpenTabAction, browser: SupatestBrowserContext):
+        #     await browser.create_new_tab(params.url)
+        #     msg = f'🔗  Opened new tab with {params.url}'
+        #     logger.info(msg)
+        #     return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Scroll down the page by pixel amount - if no amount is specified, scroll down one page', param_model=ScrollAction)
         async def scroll_down(params: ScrollAction, browser: SupatestBrowserContext):
