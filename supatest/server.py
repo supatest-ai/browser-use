@@ -17,6 +17,11 @@ from browser_use.logging_config import setup_logging
 setup_logging()
 logger = logging.getLogger("py_ws_server")
 
+from lmnr.sdk.laminar import Laminar
+# Make sure to set the project api key in the environment variable LMNR_PROJECT_API_KEY
+Laminar.initialize()
+
+
 class Server:
     """
     Socket.IO server that handles automation setup and execution.
