@@ -1,3 +1,346 @@
+// Constants
+const MAX_TEXT_LENGTH = 50;
+const TEXT_ELEMENTS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'label', 'td', 'th', 'li'];
+const CONTAINER_ELEMENTS = [
+  'div', 'section', 'article', 'main', 'aside', 'header', 'footer', 'nav', 'form', 'fieldset', 'table', 'ul', 'ol'
+];
+const HEADING_ELEMENTS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+
+// Utility functions
+function truncateText(text, maxLength = MAX_TEXT_LENGTH) {
+  if (!text || text.length <= maxLength) return text || '';
+  const truncated = text.substring(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return lastSpace > maxLength * 0.7 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+}
+
+function findClosestHeading(element) {
+  let current = element;
+  while (current && current !== document.body) {
+    let sibling = current.previousElementSibling;
+    while (sibling) {
+      if (HEADING_ELEMENTS.includes(sibling.tagName.toLowerCase())) {
+        return sibling;
+      }
+      sibling = sibling.previousElementSibling;
+    }
+    current = current.parentElement;
+  }
+  return element.closest(HEADING_ELEMENTS.join(','));
+}
+
+function getElementContext(element) {
+  const ariaLabel = element.getAttribute('aria-label')?.trim();
+  if (ariaLabel) return truncateText(ariaLabel);
+
+  const labelledBy = element.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    const labelElement = document.getElementById(labelledBy);
+    if (labelElement) return truncateText(labelElement.textContent?.trim() || '');
+  }
+
+  if (element instanceof HTMLInputElement || element instanceof HTMLSelectElement) {
+    const id = element.id;
+    if (id) {
+      const label = document.querySelector(`label[for="${id}"]`);
+      if (label) return truncateText(label.textContent?.trim() || '');
+    }
+
+    const parentLabel = element.closest('label');
+    if (parentLabel) {
+      const labelText = parentLabel.textContent?.trim() || '';
+      return truncateText(labelText.replace(element.value || '', '').trim());
+    }
+  }
+
+  const fieldset = element.closest('fieldset');
+  if (fieldset) {
+    const legend = fieldset.querySelector('legend');
+    if (legend) return truncateText(legend.textContent?.trim() || '');
+  }
+
+  const closestHeading = findClosestHeading(element);
+  if (closestHeading) return truncateText(closestHeading.textContent?.trim() || '');
+
+  return '';
+}
+
+function getFirstMeaningfulText(element) {
+  if (element instanceof HTMLInputElement) {
+    const value = element.value?.trim();
+    const placeholder = element.placeholder?.trim();
+    const name = element.name?.trim();
+    const label = getElementContext(element);
+    return truncateText(value || placeholder || label || name || '');
+  }
+
+  if (element instanceof HTMLSelectElement) {
+    const selectedOption = element.options[element.selectedIndex];
+    const selectedText = selectedOption?.text?.trim();
+    const selectedValue = selectedOption?.value?.trim();
+    const label = getElementContext(element);
+    return truncateText(selectedText || selectedValue || label || element.name || '');
+  }
+
+  if (element instanceof HTMLButtonElement) {
+    const buttonText = element.textContent?.trim();
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    const title = element.title?.trim();
+    const value = element.value?.trim();
+    return truncateText(buttonText || ariaLabel || title || value || '');
+  }
+
+  if (element instanceof HTMLAnchorElement) {
+    const text = element.textContent?.trim();
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    const title = element.title?.trim();
+    let href = element.getAttribute('href')?.trim();
+    if (href) {
+      href = href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+    }
+    return truncateText(text || ariaLabel || title || href || '');
+  }
+
+  if (TEXT_ELEMENTS.includes(element.tagName.toLowerCase())) {
+    const directText = Array.from(element.childNodes)
+      .filter(node => node.nodeType === Node.TEXT_NODE)
+      .map(node => node.textContent?.trim())
+      .filter(Boolean)
+      .join(' ');
+    if (directText) return truncateText(directText);
+  }
+
+  const fullText = element.textContent?.trim();
+  if (fullText) return truncateText(fullText);
+
+  return '';
+}
+
+function getParentContext(element) {
+  // First check for form context
+  const formParent = element.closest('form');
+  if (formParent) {
+    const formLabel = formParent.getAttribute('aria-label')?.trim();
+    const formTitle = formParent.getAttribute('title')?.trim();
+    const formId = formParent.id?.trim();
+    const formName = formParent.getAttribute('name')?.trim();
+    const formHeading = findClosestHeading(formParent);
+    const formHeadingText = formHeading?.textContent?.trim();
+
+    // Convert camelCase/snake_case to readable text if using ID/name
+    let readableId = '';
+    if (formId || formName) {
+      readableId = (formId || formName)
+        .replace(/([A-Z])/g, ' $1') // camelCase to spaces
+        .replace(/_/g, ' ') // snake_case to spaces
+        .toLowerCase()
+        .trim();
+    }
+
+    return truncateText(formLabel || formTitle || formHeadingText || readableId || 'form');
+  }
+
+  // Then check for other meaningful containers
+  for (const containerType of CONTAINER_ELEMENTS) {
+    const container = element.closest(containerType);
+    if (container && container !== element) {
+      // Try to find a heading within this container first
+      const containerHeading = findClosestHeading(container);
+      if (containerHeading) {
+        return truncateText(containerHeading.textContent?.trim() || '');
+      }
+
+      // Then try other identifying attributes
+      const containerText = getFirstMeaningfulText(container);
+      if (containerText) {
+        return truncateText(containerText);
+      }
+
+      const containerLabel = container.getAttribute('aria-label')?.trim();
+      const containerTitle = container.getAttribute('title')?.trim();
+      if (containerLabel || containerTitle) {
+        return truncateText(containerLabel || containerTitle || '');
+      }
+
+      // If no other context found, try to use a meaningful ID
+      const id = container.id?.trim();
+      if (id && !isDynamicId(id)) {
+        // Convert camelCase or snake_case IDs to readable text
+        const readableId = id
+          .replace(/([A-Z])/g, ' $1') // camelCase to spaces
+          .replace(/_/g, ' ') // snake_case to spaces
+          .toLowerCase()
+          .trim();
+        return truncateText(readableId);
+      }
+
+      // If it's a special container type (not div), use that
+      if (containerType !== 'div') {
+        return containerType;
+      }
+    }
+  }
+
+  return '';
+}
+
+function generateLocatorDescription(element) {
+  // Get parent context for better descriptions
+  const parentContext = getParentContext(element);
+  let description = '';
+
+  if (element.tagName.toLowerCase() === 'button') {
+    const text = getFirstMeaningfulText(element);
+    const buttonText = text || element.value?.trim() || 'button';
+    description = buttonText;
+    // Add button type if available
+    const type = element.getAttribute('type')?.trim();
+    if (type && type !== 'submit') {
+      description += ` (${type} button)`;
+    }
+  }
+
+  else if (element.tagName.toLowerCase() === 'input') {
+    const input = element;
+    let inputTitle = getElementContext(input);
+
+    if (!inputTitle && input.placeholder?.trim()) {
+      inputTitle = input.placeholder.trim();
+    }
+
+    if (!inputTitle && input.name?.trim()) {
+      inputTitle = input.name.trim()
+        .replace(/([A-Z])/g, ' $1') // camelCase to spaces
+        .replace(/_/g, ' ') // snake_case to spaces
+        .toLowerCase();
+    }
+
+    if (input.type === 'checkbox' || input.type === 'radio') {
+      description = inputTitle ? `${inputTitle} ${input.type}` : input.type;
+      if (input.checked) {
+        description += ' (checked)';
+      }
+    }
+    else if (input.type === 'file') {
+      description = inputTitle ? `${inputTitle} file upload` : 'file upload';
+    }
+    else if (input.type === 'submit' || input.type === 'button') {
+      description = inputTitle || input.value?.trim() || `${input.type} button`;
+    }
+    else {
+      const type = input.type === 'text' ? '' : ` (${input.type})`;
+      description = inputTitle ? `${inputTitle} field${type}` : `${input.type || 'text'} field`;
+    }
+  }
+
+  else if (element.tagName.toLowerCase() === 'select') {
+    const select = element;
+    let selectTitle = getElementContext(select);
+
+    if (!selectTitle) {
+      const selectedOption = select.options[select.selectedIndex];
+      if (selectedOption?.text?.trim()) {
+        selectTitle = selectedOption.text.trim();
+      }
+    }
+
+    if (!selectTitle && select.name?.trim()) {
+      selectTitle = select.name.trim()
+        .replace(/([A-Z])/g, ' $1') // camelCase to spaces
+        .replace(/_/g, ' ') // snake_case to spaces
+        .toLowerCase();
+    }
+
+    description = selectTitle ? `${selectTitle} dropdown` : 'dropdown';
+  }
+
+  else if (element.tagName.toLowerCase() === 'a') {
+    const text = getFirstMeaningfulText(element);
+    const linkTitle = element.getAttribute('title')?.trim();
+    let href = element.getAttribute('href')?.trim();
+    if (href) {
+      href = href.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+    }
+    description = text || linkTitle || href || 'link';
+    // Add link destination if different from text
+    if (href && text && !href.includes(text.toLowerCase())) {
+      description += ` (to ${href})`;
+    }
+  }
+
+  else if (element.tagName.toLowerCase() === 'textarea') {
+    let textareaTitle = getElementContext(element);
+    if (!textareaTitle && element.placeholder?.trim()) {
+      textareaTitle = element.placeholder.trim();
+    }
+    if (!textareaTitle && element.name?.trim()) {
+      textareaTitle = element.name.trim()
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/_/g, ' ')
+        .toLowerCase();
+    }
+    description = textareaTitle ? `${textareaTitle} text area` : 'text area';
+  }
+
+  else if (CONTAINER_ELEMENTS.includes(element.tagName.toLowerCase())) {
+    const text = getFirstMeaningfulText(element);
+    if (text) {
+      description = text;
+      // Add element type for clarity if it's not a div
+      if (element.tagName.toLowerCase() !== 'div') {
+        description += ` (${element.tagName.toLowerCase()})`;
+      }
+    } else {
+      description = element.tagName.toLowerCase();
+    }
+  }
+
+  else if (element.tagName.toLowerCase() === 'img') {
+    const altText = element.getAttribute('alt')?.trim();
+    const src = element.getAttribute('src')?.trim();
+    if (altText) {
+      description = `${altText} image`;
+    } else if (src) {
+      // Extract filename from src
+      const filename = src.split('/').pop()?.split('?')[0] || '';
+      description = filename ? `image (${filename})` : 'image';
+    } else {
+      description = 'image';
+    }
+  }
+
+  else if (element.tagName.toLowerCase() === 'svg') {
+    const altText = element.getAttribute('alt')?.trim();
+    const titleElement = element.querySelector('title');
+    const titleText = titleElement?.textContent?.trim();
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    description = altText || titleText || ariaLabel || 'icon';
+    if (description !== 'icon' && !description.toLowerCase().includes('icon')) {
+      description += ' icon';
+    }
+  }
+
+  else {
+    const text = getFirstMeaningfulText(element);
+    if (text) {
+      description = text;
+      // Add element type for non-standard elements
+      if (!TEXT_ELEMENTS.includes(element.tagName.toLowerCase())) {
+        description += ` (${element.tagName.toLowerCase()})`;
+      }
+    } else {
+      description = element.tagName.toLowerCase();
+    }
+  }
+
+  // Add parent context if available and relevant
+  if (parentContext && !description.toLowerCase().includes(parentContext.toLowerCase())) {
+    description = `${description} in ${parentContext}`;
+  }
+
+  return description;
+}
+
 (domElement) => {
   // Utility functions
   function escapeAttribute(str) {
@@ -421,5 +764,6 @@
   return {
     locator,
     allUniqueLocators,
+    locatorEnglishValue: generateLocatorDescription(domElement)
   };
 };

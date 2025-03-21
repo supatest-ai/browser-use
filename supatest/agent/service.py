@@ -542,8 +542,10 @@ class SupatestAgent(Agent[Context]):
                 eval_element = await element_handle.evaluate(self.locator_js_code)
                 locator = eval_element['locator']
                 all_unique_locators = eval_element['allUniqueLocators']
+                locator_english_value = eval_element['locatorEnglishValue']
                 logger.debug(f'Locator: {locator}')
                 logger.debug(f'All Unique Locators: {all_unique_locators}')
+                logger.debug(f'Locator English Value: {locator_english_value}')
 
             result = await self.controller.act(
                 action,
@@ -558,6 +560,8 @@ class SupatestAgent(Agent[Context]):
             if locator and all_unique_locators:
                 action.set_locator(locator)
                 action.set_all_unique_locators(all_unique_locators)
+                if locator_english_value:
+                    action.set_locator_english_value(locator_english_value)
 
             step = action.model_dump(exclude_none=True)
             
@@ -622,9 +626,10 @@ class SupatestAgent(Agent[Context]):
                     if action_details.get('locator'):
                         step[step_type]['locator'] = action_details.get('locator')
                     if action_details.get('allUniqueLocators'):
-                        step[step_type]['allUniqueLocators'] = action_details.get('allUniqueLocators')  
+                        step[step_type]['allUniqueLocators'] = action_details.get('allUniqueLocators')
+                    if action_details.get('locatorEnglishValue'):
+                        step[step_type]['locatorEnglishValue'] = action_details.get('locatorEnglishValue')
                     break
-
 
             simplified_steps = [list(step.values())[0] for step in steps]
             # Send the updated steps via websocket
