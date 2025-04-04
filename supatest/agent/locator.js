@@ -3,7 +3,7 @@
   // Utility functions
   // src/content/services/locators/locator.ts
 function escapeAttribute(value) {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f");
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f");
 }
 function isDynamicId(id) {
   const dynamicIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
@@ -79,6 +79,7 @@ var VALID_TAGS_FOR_TEXT_SELECTORS = /* @__PURE__ */ new Set([
   "span",
   "strong",
   "em",
+  "span",
   "b",
   "i",
   "small",
@@ -88,35 +89,30 @@ var VALID_TAGS_FOR_TEXT_SELECTORS = /* @__PURE__ */ new Set([
 function getElementTagName(element) {
   return element.localName.toLowerCase();
 }
-function getDirectTextContent(element) {
-  try {
-    return Array.from(element.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent || "").map((text) => text.trim()).filter((text) => text.length > 0).join(" ").trim();
-  } catch (error) {
-    console.error("Error getting direct text content", error);
-    return "";
-  }
+function normalizeText(text) {
+  return text.trim().replace(/\s+/g, " ");
 }
-function getElementsByText(str, tag) {
-  try {
-    return Array.from(document.getElementsByTagName(tag)).filter((el) => {
-      const directText = getDirectTextContent(el);
-      return directText === str.trim();
-    });
-  } catch (error) {
-    console.error("Error getting elements by text", error);
-    return [];
+function getTextSelector(element) {
+  const textContent = element.textContent || "";
+  const normalizedText = normalizeText(textContent);
+  let textSelector = null;
+  if (normalizedText) {
+    const tagName = element.tagName.toLowerCase();
+    textSelector = `${tagName}:has-text("${escapeAttribute(normalizedText)}")`;
   }
+  return textSelector;
 }
-function isUniqueTextContent(element, text) {
-  try {
-    const tagName = getElementTagName(element);
-    if (!tagName) return false;
-    const elements = getElementsByText(text, tagName);
-    return elements.length === 1 && elements[0] === element;
-  } catch (error) {
-    console.error("Error checking unique text content", error);
-    return false;
+function isUniqueTextSelector(textSelectorElement, searchText) {
+  let matches = 0;
+  const elements = Array.from(document.querySelectorAll(textSelectorElement.tagName.toLowerCase()));
+  for (const element of elements) {
+    if (matches > 1) break;
+    const normalizedText = normalizeText(element.textContent || "");
+    if (normalizedText) {
+      if (normalizedText.includes(searchText)) matches++;
+    }
   }
+  return matches === 1;
 }
 function getAttributeSelector(element, attributes, includeTag = true) {
   if (!attributes) return null;
@@ -330,9 +326,12 @@ function getXPath(element, options) {
     let step = currentElement.localName.toLowerCase();
     const id = currentElement.getAttribute("id");
     if (id && !isDynamicId(id)) {
-      step = `*[@id="${escapeAttribute(id)}"]`;
-      steps.unshift(step);
-      break;
+      const idSelector = `[@id="${escapeAttribute(id)}"]`;
+      if (isUniqueXPathSelector(element, `//*${idSelector}`, options.logErrors)) {
+        step = `//*${idSelector}`;
+        steps.unshift(step);
+        break;
+      }
     }
     const allAttributes = [
       ...options.dataAttributes || [],
@@ -666,9 +665,10 @@ function getUniqueSelector(element, options = {}) {
   }
   const tagName = element.tagName.toLowerCase();
   if (VALID_TAGS_FOR_TEXT_SELECTORS.has(tagName)) {
-    const directTextContent = getDirectTextContent(element);
-    if (directTextContent && directTextContent.length > 0 && directTextContent.length < 100 && isUniqueTextContent(element, directTextContent)) {
-      return `text=${escapeAttribute(directTextContent)}`;
+    const normalizedText = normalizeText(element.textContent || "");
+    const textSelector = getTextSelector(element);
+    if (textSelector && isUniqueTextSelector(element, normalizedText)) {
+      return textSelector;
     }
   }
   const xpathSelector = getXPath(element, {
@@ -722,9 +722,10 @@ function getAllUniqueSelectors(element, options = {}) {
   }
   const tagName = element.tagName.toLowerCase();
   if (VALID_TAGS_FOR_TEXT_SELECTORS.has(tagName)) {
-    const directTextContent = getDirectTextContent(element);
-    if (directTextContent && directTextContent.length > 0 && directTextContent.length < 100 && isUniqueTextContent(element, directTextContent)) {
-      allSelectors.push(`text=${escapeAttribute(directTextContent)}`);
+    const normalizedText = normalizeText(element.textContent || "");
+    const textSelector = getTextSelector(element);
+    if (textSelector && isUniqueTextSelector(element, normalizedText)) {
+      allSelectors.push(textSelector);
     }
   }
   const xpathSelector = getXPath(element, {
