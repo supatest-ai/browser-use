@@ -11,11 +11,21 @@ This package extends the base functionality of `browser-use` to provide enhanced
 - **Cookie Management**: Advanced cookie handling and state management
 - **Screenshot Capabilities**: Easy screenshot capture functionality
 
+Refer to https://docs.browser-use.com/development/local-setup for the original browser use set up guide
+
 ## Installation
 
-```bash
-pip install -r requirements.txt
-```
+1. Create a virtual environment:
+    ```bash
+    uv venv --python 3.11
+    ```
+
+2. Install dependencies:
+
+    ```bash
+    # Install the package in editable mode with all development dependencies
+    uv pip install -e ".[dev]"
+    ```
 
 ## Usage
 

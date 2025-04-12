@@ -8,8 +8,8 @@ ACCOUNT := supatest-staging-deploy@chatcare-co.iam.gserviceaccount.com
 KEY_FILE := staging-deploy-svc-acc.json
 AGENT_IMAGE := asia-south1-docker.pkg.dev/$(PROJECT_ID)/browser-use-agent/image
 else ifeq ($(ENV),prod)
-PROJECT_ID := supatest-ai
-ACCOUNT := prod-deploy@supatest-ai.iam.gserviceaccount.com
+PROJECT_ID := supatest-prod
+ACCOUNT := deploy@supatest-prod.iam.gserviceaccount.com
 KEY_FILE := prod-deploy-svc-acc.json
 AGENT_IMAGE := asia-southeast1-docker.pkg.dev/$(PROJECT_ID)/browser-use-agent/image
 else
