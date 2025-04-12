@@ -408,7 +408,7 @@
         rect.top > window.innerHeight + viewportExpansion ||
         rect.right < -viewportExpansion ||
         rect.left > window.innerWidth + viewportExpansion
-      );
+      ) || viewportExpansion === -1;
 
       // Check parent visibility
       const parentElement = textNode.parentElement;
@@ -493,85 +493,36 @@
 
     // Special handling for cookie banner elements
     const isCookieBannerElement =
-      typeof element.closest === "function" &&
-      (element.closest('[id*="onetrust"]') ||
+      (typeof element.closest === 'function') && (
+        element.closest('[id*="onetrust"]') ||
         element.closest('[class*="onetrust"]') ||
         element.closest('[data-nosnippet="true"]') ||
-        element.closest('[aria-label*="cookie"]'));
+        element.closest('[aria-label*="cookie"]')
+      );
 
     if (isCookieBannerElement) {
       // Check if it's a button or interactive element within the banner
       if (
-        element.tagName.toLowerCase() === "button" ||
-        element.getAttribute("role") === "button" ||
+        element.tagName.toLowerCase() === 'button' ||
+        element.getAttribute('role') === 'button' ||
         element.onclick ||
-        element.getAttribute("onclick") ||
-        (element.classList &&
-          (element.classList.contains("ot-sdk-button") ||
-            element.classList.contains("accept-button") ||
-            element.classList.contains("reject-button"))) ||
-        element.getAttribute("aria-label")?.toLowerCase().includes("accept") ||
-        element.getAttribute("aria-label")?.toLowerCase().includes("reject")
+        element.getAttribute('onclick') ||
+        (element.classList && (
+          element.classList.contains('ot-sdk-button') ||
+          element.classList.contains('accept-button') ||
+          element.classList.contains('reject-button')
+        )) ||
+        element.getAttribute('aria-label')?.toLowerCase().includes('accept') ||
+        element.getAttribute('aria-label')?.toLowerCase().includes('reject')
       ) {
         return true;
       }
     }
 
-    // Base interactive elements and roles
     const interactiveElements = new Set([
-      "a",
-      "button",
-      "details",
-      "embed",
-      "input",
-      "menu",
-      "menuitem",
-      "object",
-      "select",
-      "textarea",
-      "canvas",
-      "summary",
-      "dialog",
-      "banner",
-    ]);
-
-    const interactiveRoles = new Set([
-      "button-icon",
-      "dialog",
-      "button-text-icon-only",
-      "treeitem",
-      "alert",
-      "grid",
-      "progressbar",
-      "radio",
-      "checkbox",
-      "menuitem",
-      "option",
-      "switch",
-      "dropdown",
-      "scrollbar",
-      "combobox",
-      "a-button-text",
-      "button",
-      "region",
-      "textbox",
-      "tabpanel",
-      "tab",
-      "click",
-      "button-text",
-      "spinbutton",
-      "a-button-inner",
-      "link",
-      "menu",
-      "slider",
-      "listbox",
-      "a-dropdown-button",
-      "button-icon-only",
-      "searchbox",
-      "menuitemradio",
-      "tooltip",
-      "tree",
-      "menuitemcheckbox",
+      "a", "button", "details", "embed", "input", "menu", "menuitem",
+      "object", "select", "textarea", "canvas", "summary", "dialog",
+      "banner"
     ]);
 
     const tagName = element.tagName.toLowerCase();
@@ -580,71 +531,86 @@
     const tabIndex = element.getAttribute("tabindex");
 
     // Add check for specific class
-    const hasAddressInputClass =
-      element.classList &&
-      (element.classList.contains("address-input__container__input") ||
-        element.classList.contains("nav-btn") ||
-        element.classList.contains("pull-left"));
+    const hasAddressInputClass = element.classList && (
+      element.classList.contains("address-input__container__input") ||
+      element.classList.contains("nav-btn") ||
+      element.classList.contains("pull-left")
+    );
 
     // Added enhancement to capture dropdown interactive elements
-    if (
-      element.classList &&
-      (element.classList.contains("dropdown-toggle") ||
-        element.getAttribute("data-toggle") === "dropdown" ||
-        element.getAttribute("aria-haspopup") === "true")
-    ) {
+    if (element.classList && (
+      element.classList.contains('dropdown-toggle') ||
+      element.getAttribute('data-toggle') === 'dropdown' ||
+      element.getAttribute('aria-haspopup') === 'true'
+    )) {
       return true;
     }
 
+    // return false
+
+    const interactiveRoles = new Set([
+      'button',           // Directly clickable element
+      // 'link',            // Clickable link
+      'menuitem',        // Clickable menu item
+      'menuitemradio',   // Radio-style menu item (selectable)
+      'menuitemcheckbox', // Checkbox-style menu item (toggleable)
+      'radio',           // Radio button (selectable)
+      'checkbox',        // Checkbox (toggleable)
+      'tab',             // Tab (clickable to switch content)
+      'switch',          // Toggle switch (clickable to change state)
+      'slider',          // Slider control (draggable)
+      'spinbutton',      // Number input with up/down controls
+      'combobox',        // Dropdown with text input
+      'searchbox',       // Search input field
+      'textbox',         // Text input field
+      'listbox',         // Selectable list
+      'option',          // Selectable option in a list
+      'scrollbar'        // Scrollable control
+    ]);
+
     // Basic role/attribute checks
     const hasInteractiveRole =
-      hasAddressInputClass ||
       interactiveElements.has(tagName) ||
       interactiveRoles.has(role) ||
-      interactiveRoles.has(ariaRole) ||
-      (tabIndex !== null &&
-        tabIndex !== "-1" &&
-        element.parentElement?.tagName.toLowerCase() !== "body") ||
-      element.getAttribute("data-action") === "a-dropdown-select" ||
-      element.getAttribute("data-action") === "a-dropdown-button";
+      interactiveRoles.has(ariaRole);
 
     if (hasInteractiveRole) return true;
 
     // Additional checks for cookie banners and consent UI
     const isCookieBanner =
-      element.id?.toLowerCase().includes("cookie") ||
-      element.id?.toLowerCase().includes("consent") ||
-      element.id?.toLowerCase().includes("notice") ||
-      (element.classList &&
-        (element.classList.contains("otCenterRounded") ||
-          element.classList.contains("ot-sdk-container"))) ||
-      element.getAttribute("data-nosnippet") === "true" ||
-      element.getAttribute("aria-label")?.toLowerCase().includes("cookie") ||
-      element.getAttribute("aria-label")?.toLowerCase().includes("consent") ||
-      (element.tagName.toLowerCase() === "div" &&
-        (element.id?.includes("onetrust") ||
-          (element.classList &&
-            (element.classList.contains("onetrust") ||
-              element.classList.contains("cookie") ||
-              element.classList.contains("consent")))));
+      element.id?.toLowerCase().includes('cookie') ||
+      element.id?.toLowerCase().includes('consent') ||
+      element.id?.toLowerCase().includes('notice') ||
+      (element.classList && (
+        element.classList.contains('otCenterRounded') ||
+        element.classList.contains('ot-sdk-container')
+      )) ||
+      element.getAttribute('data-nosnippet') === 'true' ||
+      element.getAttribute('aria-label')?.toLowerCase().includes('cookie') ||
+      element.getAttribute('aria-label')?.toLowerCase().includes('consent') ||
+      (element.tagName.toLowerCase() === 'div' && (
+        element.id?.includes('onetrust') ||
+        (element.classList && (
+          element.classList.contains('onetrust') ||
+          element.classList.contains('cookie') ||
+          element.classList.contains('consent')
+        ))
+      ));
 
     if (isCookieBanner) return true;
 
     // Additional check for buttons in cookie banners
-    const isInCookieBanner =
-      typeof element.closest === "function" &&
-      element.closest(
-        '[id*="cookie"],[id*="consent"],[class*="cookie"],[class*="consent"],[id*="onetrust"]'
-      );
+    const isInCookieBanner = typeof element.closest === 'function' && element.closest(
+      '[id*="cookie"],[id*="consent"],[class*="cookie"],[class*="consent"],[id*="onetrust"]'
+    );
 
-    if (
-      isInCookieBanner &&
-      (element.tagName.toLowerCase() === "button" ||
-        element.getAttribute("role") === "button" ||
-        (element.classList && element.classList.contains("button")) ||
-        element.onclick ||
-        element.getAttribute("onclick"))
-    ) {
+    if (isInCookieBanner && (
+      element.tagName.toLowerCase() === 'button' ||
+      element.getAttribute('role') === 'button' ||
+      (element.classList && element.classList.contains('button')) ||
+      element.onclick ||
+      element.getAttribute('onclick')
+    )) {
       return true;
     }
 
@@ -667,14 +633,6 @@
         const listeners = {};
         const eventTypes = [
           "click",
-          "mousedown",
-          "mouseup",
-          "touchstart",
-          "touchend",
-          "keydown",
-          "keyup",
-          "focus",
-          "blur",
         ];
 
         for (const type of eventTypes) {
@@ -717,13 +675,15 @@
       element.draggable || element.getAttribute("draggable") === "true";
 
     return (
-      hasAriaProps ||
-      hasClickHandler ||
-      hasClickListeners ||
-      isDraggable ||
-      isContentEditable
+      // hasAriaProps ||
+      // hasClickHandler ||
+      // hasClickListeners ||
+      // isDraggable ||
+      // isContentEditable ||
+      false
     );
   }
+
 
   /**
    * Checks if an element is the topmost element at its position.
@@ -732,11 +692,12 @@
     const rect = getCachedBoundingRect(element);
 
     // If element is not in viewport, consider it top
-    const isInViewport =
+    const isInViewport = (
       rect.left < window.innerWidth &&
       rect.right > 0 &&
       rect.top < window.innerHeight &&
-      rect.bottom > 0;
+      rect.bottom > 0
+    );
 
     if (!isInViewport) {
       return true;
@@ -859,7 +820,8 @@
       element.hasAttribute("role") ||
       element.hasAttribute("tabindex") ||
       element.hasAttribute("aria-") ||
-      element.hasAttribute("data-action");
+      element.hasAttribute("data-action") ||
+      element.getAttribute("contenteditable") == "true";
 
     return hasQuickInteractiveAttr;
   }
@@ -1042,16 +1004,16 @@
           if (domElement) nodeData.children.push(domElement);
         }
       }
-      // Handle shadow DOM
-      else if (node.shadowRoot) {
-        nodeData.shadowRoot = true;
-        for (const child of node.shadowRoot.childNodes) {
-          const domElement = buildDomTree(child, parentIframe);
-          if (domElement) nodeData.children.push(domElement);
-        }
-      }
-      // Handle regular elements
       else {
+        // Handle shadow DOM
+        if (node.shadowRoot) {
+          nodeData.shadowRoot = true;
+          for (const child of node.shadowRoot.childNodes) {
+            const domElement = buildDomTree(child, parentIframe);
+            if (domElement) nodeData.children.push(domElement);
+          }
+        }
+        // Handle regular elements
         for (const child of node.childNodes) {
           const domElement = buildDomTree(child, parentIframe);
           if (domElement) nodeData.children.push(domElement);
