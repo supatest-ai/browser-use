@@ -13,13 +13,11 @@ from supatest.agent.views import SupatestAgentHistoryList
 from supatest.browser.browser import SupatestBrowser 
 from supatest.browser.context import SupatestBrowserContext
 from supatest.controller.service import SupatestController
-from supatest.dom.service import SupatestDomService 
 
 __all__ = [
 	'SupatestAgent',
 	'SupatestBrowser',
 	'SupatestController',
-	'SupatestDomService',
 	'SupatestActionModel',
 	'SupatestAgentHistoryList',
 	'SupatestBrowserContext',
