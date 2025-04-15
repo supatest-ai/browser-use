@@ -1,5 +1,7 @@
 from typing import Callable, Dict, Type
 from pydantic import BaseModel, ConfigDict, Field
+from playwright.async_api import Page
+
 
 from browser_use.controller.registry.views import RegisteredAction, ActionRegistry
 
@@ -80,9 +82,42 @@ class SupatestActionRegistry(ActionRegistry):
     
     actions: Dict[str, SupatestRegisteredAction] = {}
     
-    def get_prompt_description(self) -> str:
-        """Get a description of all actions for the prompt in supatest format"""
-        return '\n'.join([action.prompt_description() for action in self.actions.values()])
+    # def get_prompt_description(self) -> str:
+    #     """Get a description of all actions for the prompt in supatest format"""
+    #     return '\n'.join([action.prompt_description() for action in self.actions.values()])
+    def get_prompt_description(self, page: Page | None = None) -> str:
+        """Get a description of all actions for the prompt
+
+        Args:
+            page: If provided, filter actions by page using page_filter and domains.
+
+        Returns:
+            A string description of available actions.
+            - If page is None: return only actions with no page_filter and no domains (for system prompt)
+            - If page is provided: return only filtered actions that match the current page (excluding unfiltered actions)
+        """
+        if page is None:
+            # For system prompt (no page provided), include only actions with no filters
+            return '\n'.join(
+                action.prompt_description()
+                for action in self.actions.values()
+                if action.page_filter is None and action.domains is None
+            )
+
+        # only include filtered actions for the current page
+        filtered_actions = []
+        for action in self.actions.values():
+            if not (action.domains or action.page_filter):
+                # skip actions with no filters, they are already included in the system prompt
+                continue
+
+            domain_is_allowed = self._match_domains(action.domains, page.url)
+            page_is_allowed = self._match_page_filter(action.page_filter, page)
+
+            if domain_is_allowed and page_is_allowed:
+                filtered_actions.append(action)
+
+        return '\n'.join(action.prompt_description() for action in filtered_actions)
 
 
 __all__ = [
