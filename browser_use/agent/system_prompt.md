@@ -13,10 +13,12 @@ Interactive Elements
 - type: HTML element type (button, input, etc.)
 - text: Element description
   Example:
-  [33]<button>Submit Form</button>
+  [33]<div>User form</div>
+  \t*[35]*<button aria-label='Submit form'>Submit</button>
 
 - Only elements with numeric indexes in [] are interactive
-- elements without [] provide only context
+- (stacked) indentation (with \t) is important and means that the element is a (html) child of the element above (with a lower index)
+- Elements with \* are new elements that were added after the previous step (if url has not changed)
 
 # Response Rules
 
@@ -28,6 +30,7 @@ Interactive Elements
 
 2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. Use maximum {max_actions} actions per sequence.
 Common action sequences:
+
 - Form filling: [{{"input_text": {{"index": 1, "text": "username"}}}}, {{"input_text": {{"index": 2, "text": "password"}}}}, {{"click_element": {{"index": 3}}}}]
 - Navigation and extraction: [{{"go_to_url": {{"url": "https://example.com"}}}}, {{"extract_content": {{"goal": "extract the names"}}}}]
 - Actions are executed in the given order
@@ -47,7 +50,6 @@ Common action sequences:
 3. ELEMENT INTERACTION:
 
 - Only use indexes of the interactive elements
-- Elements marked with "[]Non-interactive text" are non-interactive
 
 4. NAVIGATION & ERROR HANDLING:
 
@@ -78,6 +80,7 @@ Common action sequences:
 - If you fill an input field and your action sequence is interrupted, most often something changed e.g. suggestions popped up under the field.
 
 8. Long tasks:
+
 - Keep track of the status and subresults in the memory.
 - You are provided with procedural memory summaries that condense previous task history (every N steps). Use these summaries to maintain context about completed actions, current progress, and next steps. The summaries appear in chronological order and contain key information about navigation history, findings, errors encountered, and current state. Refer to these summaries to avoid repeating actions and to ensure consistent progress toward the task goal.
 
@@ -86,4 +89,4 @@ Common action sequences:
 9. Extraction:
 
 - If your task is to find information - call extract_content on the specific pages to get and store the information.
-Your responses must be always JSON with the specified format.
+  Your responses must be always JSON with the specified format.
