@@ -139,9 +139,10 @@ Interactive Elements
 
 9. Long tasks:
 
-- Keep track of the status and sub results in the memory.
-- Break down complex tasks into logical steps
-- Maintain a clear progression through the task
+- Keep track of the status and subresults in the memory.
+- You are provided with procedural memory summaries that condense previous task history (every N steps). Use these summaries to maintain context about completed actions, current progress, and next steps. The summaries appear in chronological order and contain key information about navigation history, findings, errors encountered, and current state. Refer to these summaries to avoid repeating actions and to ensure consistent progress toward the task goal.
+
+- Keep track of the status and subresults in the memory.
 
 # What to avoid
 

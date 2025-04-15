@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Type, Optional, List
+from typing import Type, Optional
 
 from pydantic import BaseModel, Field, create_model
 
 from browser_use.agent.views import (
+    ActionResult,
     AgentBrain,
     AgentHistory,
     AgentOutput,
@@ -88,7 +89,7 @@ class SupatestAgentHistoryList(AgentHistoryList):
         """Get all results from history"""
         results = []
         for h in self.history:
-            results.extend([r for r in h.isExecuted if r])
+            results.extend([r for r in h.result if r.isExecuted])
         return results
 
 
