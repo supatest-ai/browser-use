@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from importlib import resources
 from typing import TYPE_CHECKING, Optional, Tuple, Dict, cast
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -21,7 +22,7 @@ class SupatestDomService(DomService):
     def __init__(self, page: 'Page'):
         super().__init__(page)
         # Use the original buildDomTree.js from browser_use
-        self.js_code = resources.read_text('browser_use.dom', 'buildDomTree.js')
+        self.js_code = resources.files('browser_use.dom').joinpath('buildDomTree.js').read_text()
 
     @time_execution_async('--get_clickable_elements')
     async def get_clickable_elements(
@@ -37,6 +38,24 @@ class SupatestDomService(DomService):
         supatest_map = cast(Dict[int, SupatestDOMElementNode], selector_map)
         logger.debug(f"[Supatest] Found {len(supatest_map)} clickable elements")
         return SupatestDOMState(element_tree=supatest_tree, selector_map=supatest_map)
+    
+    @time_execution_async('--get_cross_origin_iframes')
+    async def get_cross_origin_iframes(self) -> list[str]:
+        # invisible cross-origin iframes are used for ads and tracking, dont open those
+        hidden_frame_urls = await self.page.locator('iframe').filter(visible=False).evaluate_all('e => e.map(e => e.src)')
+        
+        is_ad_url = lambda url: any(
+			domain in urlparse(url).netloc for domain in ('doubleclick.net', 'adroll.com', 'googletagmanager.com')
+		)
+        
+        return [
+			frame.url
+			for frame in self.page.frames
+			if urlparse(frame.url).netloc  # exclude data:urls and about:blank
+			and urlparse(frame.url).netloc != urlparse(self.page.url).netloc  # exclude same-origin iframes
+			and frame.url not in hidden_frame_urls  # exclude hidden frames
+			and not is_ad_url(frame.url)  # exclude most common ad network tracker frame URLs
+		]
 
     @time_execution_async('--build_dom_tree')
     async def _build_dom_tree(
@@ -49,7 +68,24 @@ class SupatestDomService(DomService):
         
         if await self.page.evaluate('1+1') != 2:
             raise ValueError('The page cannot evaluate javascript code properly')
+        
+        if self.page.url == 'about:blank':
+            # short-circuit if the page is a new empty tab for speed, no need to inject buildDomTree.js
+            return (
+                SupatestDOMElementNode(
+                    tag_name='body',
+                    xpath='',
+                    attributes={},
+                    children=[],
+					is_visible=False,
+					parent=None,
+				),
+				{},
+			)
 
+		# NOTE: We execute JS code in the browser to extract important DOM information.
+		#       The returned hash map contains information about the DOM tree and the
+		#       relationship between the DOM elements.
         debug_mode = logger.getEffectiveLevel() == logging.DEBUG
         args = {
             'doHighlightElements': highlight_elements,
@@ -60,7 +96,7 @@ class SupatestDomService(DomService):
 
         try:
             logger.debug("[Supatest] Evaluating custom buildDomTree.js")
-            eval_page = await self.page.evaluate(self.js_code, args)
+            eval_page: dict = await self.page.evaluate(self.js_code, args)
             logger.debug("[Supatest] Successfully evaluated buildDomTree.js")
         except Exception as e:
             logger.error('Error evaluating JavaScript: %s', e)
