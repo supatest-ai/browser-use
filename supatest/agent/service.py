@@ -225,7 +225,7 @@ class SupatestAgent(Agent[Context]):
         logger.info(f'📍 Step {self.state.n_steps} | Subgoal ID: {subgoal_id}')
 
         try:
-            state = await self.browser_context.get_state()
+            state = await self.browser_context.get_state(cache_clickable_elements_hashes=True)
             await self._raise_if_stopped_or_paused()
 
             self._message_manager.add_state_message(state, self.state.last_result, step_info, self.settings.use_vision)
@@ -499,7 +499,7 @@ class SupatestAgent(Agent[Context]):
         for i, action in enumerate(actions):
             isExecuted = 'pending'
             if action.get_index() is not None and i != 0:
-                new_state = await self.browser_context.get_state()
+                new_state = await self.browser_context.get_state(cache_clickable_elements_hashes=False)
                 new_path_hashes = set(e.hash.branch_path_hash for e in new_state.selector_map.values())
                 if check_for_new_elements and not new_path_hashes.issubset(cached_path_hashes):
                     # next action requires index but there are new elements on the page
