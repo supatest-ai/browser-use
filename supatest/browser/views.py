@@ -4,9 +4,8 @@ from typing import Dict, Optional
 from browser_use.browser.views import (
     BrowserState,
     TabInfo,
-    URLNotAllowedError,
 )
-from supatest.dom.views import SupatestDOMElementNode
+from browser_use.dom.views import DOMElementNode
 
 
 @dataclass
@@ -16,8 +15,8 @@ class SupatestBrowserState(BrowserState):
     title: str = ""
     scroll_x: int = 0
     scroll_y: int = 0
-    element_tree: Optional[SupatestDOMElementNode] = None
-    selector_map: Dict[int, SupatestDOMElementNode] = field(default_factory=dict)
+    element_tree: Optional[DOMElementNode] = None
+    selector_map: Dict[int, DOMElementNode] = field(default_factory=dict)
     tabs: list[TabInfo] = field(default_factory=list)
 
     def __post_init__(self):
