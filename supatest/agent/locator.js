@@ -30,7 +30,7 @@ function isDynamicClass(className) {
   return hashPattern.test(className) || frameworkPatterns.some((pattern) => pattern.test(className)) || utilityPattern.test(className);
 }
 function isDynamicAttr(name, value) {
-  if (name === "id") {
+  if (name === "id" || name.startsWith("data-")) {
     return isDynamicId(value);
   } else if (name === "class") {
     return isDynamicClass(value);
@@ -86,6 +86,7 @@ var VALID_TAGS_FOR_TEXT_SELECTORS = /* @__PURE__ */ new Set([
   "caption",
   "figcaption"
 ]);
+var EXCLUDE_TEXT_SELECTOR_TAGS = ["svg", "path", "desc"];
 function getElementTagName(element) {
   return element.localName.toLowerCase();
 }
@@ -133,7 +134,7 @@ function getElementSelector(element, options) {
   if (element.id && !isDynamicId(element.id)) {
     const idSelector = `#${CSS.escape(element.id)}`;
     if (isUniqueCSSSelector(element, idSelector)) {
-      if (options.deterministicLocatorCounter) {
+      if (options.deterministicLocatorCounter !== void 0) {
         options.deterministicLocatorCounter++;
       }
       return idSelector;
@@ -141,7 +142,7 @@ function getElementSelector(element, options) {
   }
   const dataAttributeSelector = getAttributeSelector(element, dataAttributes);
   if (dataAttributeSelector) {
-    if (options.deterministicLocatorCounter) {
+    if (options.deterministicLocatorCounter !== void 0) {
       options.deterministicLocatorCounter++;
     }
     return dataAttributeSelector;
@@ -183,10 +184,9 @@ function getUniqueCssSelector(element, options) {
     }
     const combinedSelector = selectors.join(" > ");
     if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
-      if (options.deterministicLocatorCounter && options.deterministicLocatorCounter > 0) {
+      if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
         return combinedSelector;
       }
-      return null;
     }
     const parent = currentElement.parentElement;
     if (!parent) break;
@@ -195,10 +195,9 @@ function getUniqueCssSelector(element, options) {
   }
   const finalSelector = selectors.join(" > ");
   if (isUniqueCSSSelector(element, finalSelector, options.logErrors)) {
-    if (options.deterministicLocatorCounter && options.deterministicLocatorCounter > 0) {
+    if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
       return finalSelector;
     }
-    return null;
   }
   return null;
 }
@@ -223,7 +222,7 @@ function getAllElementSelectors(element, options) {
   if (element.id && !isDynamicId(element.id)) {
     const idSelector = `#${CSS.escape(element.id)}`;
     if (isUniqueCSSSelector(element, idSelector)) {
-      if (options.deterministicLocatorCounter) {
+      if (options.deterministicLocatorCounter !== void 0) {
         options.deterministicLocatorCounter++;
       }
       selectors.push(idSelector);
@@ -231,7 +230,7 @@ function getAllElementSelectors(element, options) {
   }
   const dataAttributeSelectors = getAllAttributeSelectors(element, dataAttributes);
   if (dataAttributeSelectors.length > 0) {
-    if (options.deterministicLocatorCounter) {
+    if (options.deterministicLocatorCounter !== void 0) {
       options.deterministicLocatorCounter++;
     }
     selectors.push(...dataAttributeSelectors);
@@ -275,7 +274,7 @@ function getAllUniqueCssSelectors(element, options) {
     for (const path of paths) {
       const combinedSelector = path.selectors.join(" > ");
       if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
-        if (options.deterministicLocatorCounter && options.deterministicLocatorCounter > 0) {
+        if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
           allUniqueSelectors.add(combinedSelector);
         }
       }
@@ -634,7 +633,7 @@ function getUniqueSelector(element, options = {}) {
   const {
     maxDepth = 6,
     // Adjusted max depth
-    dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa"],
+    dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
     includeTag = true,
     logErrors = false,
@@ -644,7 +643,6 @@ function getUniqueSelector(element, options = {}) {
       "data-name",
       "data-icon-name",
       "data-icon",
-      "data-cy",
       "data-node-key",
       "data-id",
       "data-menu-xmlid"
@@ -687,7 +685,7 @@ function getAllUniqueSelectors(element, options = {}) {
   const {
     maxDepth = 6,
     // Adjusted max depth
-    dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa"],
+    dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
     includeTag = true,
     logErrors = false,
@@ -697,7 +695,6 @@ function getAllUniqueSelectors(element, options = {}) {
       "data-name",
       "data-icon-name",
       "data-icon",
-      "data-cy",
       "data-node-key",
       "data-id",
       "data-menu-xmlid"
