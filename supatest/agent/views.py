@@ -10,6 +10,7 @@ from browser_use.agent.views import (
     AgentHistory,
     AgentOutput,
     AgentHistoryList,
+    AgentState,
 )
 from supatest.controller.registry.views import SupatestActionModel
 
@@ -93,6 +94,13 @@ class SupatestAgentHistoryList(AgentHistoryList):
         return results
 
 
+class SupatesAgentState(AgentState):
+    """Extended version of AgentState that includes page_summary"""
+    
+    last_result: Optional[list[SupatestActionResult]] = Field(default=None, description="Last result from the agent")
+    history: SupatestAgentHistoryList = Field(default_factory=lambda: SupatestAgentHistoryList(history=[]))
+
+
 # Re-export other classes that we're not modifying
 __all__ = [
     'SupatestAgentBrain',
@@ -100,4 +108,5 @@ __all__ = [
     'SupatestAgentHistory',
     'SupatestAgentHistoryList',
     'SupatestActionResult',
+    'SupatesAgentState',
 ] 

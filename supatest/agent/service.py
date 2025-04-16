@@ -33,7 +33,7 @@ from browser_use.agent.message_manager.service import MessageManager, MessageMan
 from browser_use.browser.views import  BrowserError, BrowserState, BrowserStateHistory
 
 from browser_use.utils import time_execution_async
-from supatest.agent.views import SupatestAgentOutput, SupatestAgentHistory, SupatestAgentHistoryList, SupatestActionResult
+from supatest.agent.views import SupatesAgentState, SupatestAgentOutput, SupatestAgentHistory, SupatestAgentHistoryList, SupatestActionResult
 from supatest.controller.registry.views import SupatestActionModel
 
 from supatest.browser.browser import SupatestBrowser
@@ -70,6 +70,7 @@ class SupatestAgent(Agent[Context]):
         requestId: Optional[str] = None,
         testCaseId: Optional[str] = None,
         active_page_id: Optional[str] = None,
+        injected_agent_state: Optional[SupatesAgentState] = None,
         **kwargs
     ):
         # Initialize consecutive_eval_failure first
@@ -82,6 +83,9 @@ class SupatestAgent(Agent[Context]):
         # Handle browser and browser_context setup before calling super().__init__
         self.injected_browser = browser is not None
         self.injected_browser_context = browser_context is not None
+        
+        # Initialize state
+        self.state = injected_agent_state or SupatesAgentState()
         
         # If only browser is provided, create a SupatestBrowserContext
         if browser and not browser_context:
@@ -358,9 +362,6 @@ class SupatestAgent(Agent[Context]):
                 # Check again for paused/stopped state after getting model output
                 # This is needed in case Ctrl+C was pressed during the get_next_action call
                 await self._raise_if_stopped_or_paused()
-                
-                self.state.n_steps += 1
-
                 if self.register_new_step_callback:
                     if inspect.iscoroutinefunction(self.register_new_step_callback):
                         await self.register_new_step_callback(state, model_output, self.state.n_steps)
