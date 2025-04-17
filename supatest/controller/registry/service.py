@@ -52,6 +52,7 @@ class SupatestRegistry(Registry[Context]):
 
         return decorator
     
+    @time_execution_sync('--create_action_model')
     def create_action_model(self, include_actions: Optional[list[str]] = None, page=None) -> Type[SupatestActionModel]:
         """Creates a Pydantic model from registered actions, used by LLM APIs that support tool calling & enforce a schema"""
 

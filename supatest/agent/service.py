@@ -41,8 +41,9 @@ from supatest.browser.context import SupatestBrowserContext
 from supatest.browser.views import SupatestBrowserState
 from supatest.controller.service import SupatestController
 from importlib import resources
-
+import os
 logger = logging.getLogger(__name__)
+SKIP_LLM_API_KEY_VERIFICATION = os.environ.get('SKIP_LLM_API_KEY_VERIFICATION', 'false').lower()[0] in 'ty1'
 
 Context = TypeVar('Context')
 AgentHookFunc = Callable[['Agent'], None]
@@ -144,7 +145,7 @@ class SupatestAgent(Agent[Context]):
             state=self.state.message_manager_state,
         )
         
-        self.locator_js_code = resources.read_text('supatest.agent', 'locator.js')
+        self.locator_js_code = resources.files('supatest.agent').joinpath('locator.js').read_text()
 
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended SupatestAgentOutput"""
@@ -503,16 +504,27 @@ class SupatestAgent(Agent[Context]):
         )
         signal_handler.register()
         
-        # Start non-blocking LLM connection verification
-        assert self.llm._verified_api_keys, 'Failed to verify LLM API keys'
+        # Wait for verification task to complete if it exists
+        if hasattr(self, '_verification_task') and not self._verification_task.done():
+            try:
+                await self._verification_task
+            except Exception:
+                # Error already logged in the task
+                pass
+                
+        # Check that verification was successful
+        assert self.llm._verified_api_keys or SKIP_LLM_API_KEY_VERIFICATION, (
+			'Failed to connect to LLM API or LLM API is not responding correctly'
+		)
         
+     
         
         try:
             self._log_agent_run()
 
             # Execute initial actions if provided
             if self.initial_actions:
-                result = await self.multi_act(self.initial_actions, subgoal_id=uuid.uuid4(), check_for_new_elements=False)
+                result = await self.multi_act(self.initial_actions, subgoal_id=str(uuid.uuid4()), check_for_new_elements=False)
                 self.state.last_result = result
 
             for step in range(max_steps):

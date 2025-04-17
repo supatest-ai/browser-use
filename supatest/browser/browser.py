@@ -12,7 +12,10 @@ class SupatestBrowser(Browser):
         config: BrowserContextConfig = BrowserContextConfig(),
     ) -> SupatestBrowserContext:
         """Override new_context to return SupatestBrowserContext instead of BrowserContext"""
-        return SupatestBrowserContext(self, config)
+        browser_config = self.config.model_dump() if self.config else {}
+        context_config = config.model_dump() if config else {}
+        merged_config = {**browser_config, **context_config}
+        return SupatestBrowserContext(config=BrowserContextConfig(**merged_config), browser=self)
 
     async def create_context(
         self,
