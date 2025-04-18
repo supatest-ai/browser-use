@@ -2,8 +2,11 @@
 (domElement) => {
   // Utility functions
   // src/content/services/locators/locator.ts
-function escapeAttribute(value) {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f");
+function escapeAttribute(value, espaceDotsAndSpaces) {
+  if (!espaceDotsAndSpaces) {
+    return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f");
+  }
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f").replace(/\./g, "\\.").replace(/\s/g, "\\ ");
 }
 function isDynamicId(id) {
   const dynamicIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
@@ -13,8 +16,8 @@ function isDynamicId(id) {
   const commonPrefixes = /^(ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_])/i;
   const randomSuffixes = /[-_][a-z0-9]{4,}$/i;
   const timeBasedIds = /\d{13,}$/;
-  const containsNumbers = /\d+/;
-  return dynamicIdPattern.test(id) || randomPattern.test(id) || longNumbersPattern.test(id) || reactPatterns.test(id) || commonPrefixes.test(id) || randomSuffixes.test(id) || timeBasedIds.test(id) || containsNumbers.test(id);
+  const isEntirelyNumbers = /^\d+$/;
+  return dynamicIdPattern.test(id) || randomPattern.test(id) || longNumbersPattern.test(id) || reactPatterns.test(id) || commonPrefixes.test(id) || randomSuffixes.test(id) || timeBasedIds.test(id) || isEntirelyNumbers.test(id);
 }
 function isDynamicClass(className) {
   const utilityPattern = /^(w-|h-|bg-|text-|p-|m-)/;
@@ -120,7 +123,8 @@ function getAttributeSelector(element, attributes, includeTag = true) {
   for (const attrName of attributes) {
     const attrValue = element.getAttribute(attrName);
     if (attrValue && !isDynamicAttr(attrName, attrValue)) {
-      const attrSelector = `[${attrName}="${escapeAttribute(attrValue)}"]`;
+      const espaceDotsAndSpaces = attrName.startsWith("data-");
+      const attrSelector = `[${attrName}="${escapeAttribute(attrValue, espaceDotsAndSpaces)}"]`;
       const selector = includeTag ? `${getElementTagName(element)}${attrSelector}` : attrSelector;
       if (isUniqueCSSSelector(element, selector)) {
         return selector;
@@ -207,7 +211,8 @@ function getAllAttributeSelectors(element, attributes, includeTag = true) {
   for (const attrName of attributes) {
     const attrValue = element.getAttribute(attrName);
     if (attrValue && !isDynamicAttr(attrName, attrValue)) {
-      const attrSelector = `[${attrName}="${escapeAttribute(attrValue)}"]`;
+      const espaceDotsAndSpaces = attrName.startsWith("data-");
+      const attrSelector = `[${attrName}="${escapeAttribute(attrValue, espaceDotsAndSpaces)}"]`;
       const selector = includeTag ? `${getElementTagName(element)}${attrSelector}` : attrSelector;
       if (isUniqueCSSSelector(element, selector)) {
         selectors.push(selector);
