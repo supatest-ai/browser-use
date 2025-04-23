@@ -78,6 +78,7 @@ TASK = """
 Go to https://coffee-cart.app/ and click on Expresso and Cappuccino and add them to the cart. Then do nothing.
 """
 
+
 async def main():
 	agent = SupatestAgent(
 		task=TASK,
