@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import gc
 import inspect
@@ -26,7 +24,12 @@ from browser_use.agent.gif import create_history_gif
 from browser_use.agent.memory.service import Memory
 from browser_use.agent.memory.views import MemoryConfig
 from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
-from browser_use.agent.message_manager.utils import convert_input_messages, extract_json_from_model_output, save_conversation
+from browser_use.agent.message_manager.utils import (
+	convert_input_messages,
+	extract_json_from_model_output,
+	is_model_without_tool_support,
+	save_conversation,
+)
 from browser_use.agent.prompts import AgentMessagePrompt, PlannerPrompt, SystemPrompt
 from browser_use.agent.views import (
 	REQUIRED_LLM_API_ENV_VARS,
@@ -145,13 +148,12 @@ class Agent(Generic[Context]):
 		planner_interval: int = 1,  # Run planner every N steps
 		is_planner_reasoning: bool = False,
 		extend_planner_system_message: Optional[str] = None,
-		# Inject state
 		injected_agent_state: Optional[AgentState] = None,
-		#
 		context: Context | None = None,
-		# Memory settings
+		save_playwright_script_path: Optional[str] = None,
 		enable_memory: bool = True,
 		memory_config: Optional[MemoryConfig] = None,
+		source: Optional[str] = None,
 	):
 		if page_extraction_llm is None:
 			page_extraction_llm = llm
@@ -183,6 +185,7 @@ class Agent(Generic[Context]):
 			planner_llm=planner_llm,
 			planner_interval=planner_interval,
 			is_planner_reasoning=is_planner_reasoning,
+			save_playwright_script_path=save_playwright_script_path,
 			extend_planner_system_message=extend_planner_system_message,
 		)
 
@@ -195,7 +198,7 @@ class Agent(Generic[Context]):
 
 		# Action setup
 		self._setup_action_models()
-		self._set_browser_use_version_and_source()
+		self._set_browser_use_version_and_source(source)
 		self.initial_actions = self._convert_initial_actions(initial_actions) if initial_actions else None
 
 		# Model setup
@@ -309,7 +312,7 @@ class Agent(Generic[Context]):
 				self.settings.message_context = f'Available actions: {self.unfiltered_actions}'
 		return self.settings.message_context
 
-	def _set_browser_use_version_and_source(self) -> None:
+	def _set_browser_use_version_and_source(self, source_override: Optional[str] = None) -> None:
 		"""Get the version and source of the browser-use package (git or pip in a nutshell)"""
 		try:
 			# First check for repository-specific files
@@ -334,7 +337,8 @@ class Agent(Generic[Context]):
 		except Exception:
 			version = 'unknown'
 			source = 'unknown'
-
+		if source_override is not None:
+			source = source_override
 		logger.debug(f'Version: {version}, Source: {source}')
 		self.version = version
 		self.source = source
@@ -373,7 +377,7 @@ class Agent(Generic[Context]):
 	def _set_tool_calling_method(self) -> Optional[ToolCallingMethod]:
 		tool_calling_method = self.settings.tool_calling_method
 		if tool_calling_method == 'auto':
-			if 'deepseek-reasoner' in self.model_name or 'deepseek-r1' in self.model_name:
+			if is_model_without_tool_support(self.model_name):
 				return 'raw'
 			elif self.chat_model_library == 'ChatGoogleGenerativeAI':
 				return None
@@ -472,6 +476,29 @@ class Agent(Generic[Context]):
 
 			try:
 				model_output = await self.get_next_action(input_messages)
+				if (
+					not model_output.action
+					or not isinstance(model_output.action, list)
+					or all(action.model_dump() == {} for action in model_output.action)
+				):
+					logger.warning('Model returned empty action. Retrying...')
+
+					clarification_message = HumanMessage(
+						content='You forgot to return an action. Please respond only with a valid JSON action according to the expected format.'
+					)
+
+					retry_messages = input_messages + [clarification_message]
+					model_output = await self.get_next_action(retry_messages)
+
+					if not model_output.action or all(action.model_dump() == {} for action in model_output.action):
+						logger.warning('Model still returned empty after retry. Inserting safe noop action.')
+						action_instance = self.ActionModel(
+							done={
+								'success': False,
+								'text': 'No next action returned by LLM!',
+							}
+						)
+						model_output.action = [action_instance]
 
 				# Check again for paused/stopped state after getting model output
 				# This is needed in case Ctrl+C was pressed during the get_next_action call
@@ -641,7 +668,7 @@ class Agent(Generic[Context]):
 
 	def _convert_input_messages(self, input_messages: list[BaseMessage]) -> list[BaseMessage]:
 		"""Convert input messages to the correct format"""
-		if self.model_name == 'deepseek-reasoner' or 'deepseek-r1' in self.model_name:
+		if is_model_without_tool_support(self.model_name):
 			return convert_input_messages(input_messages, self.model_name)
 		else:
 			return input_messages
@@ -878,6 +905,24 @@ class Agent(Generic[Context]):
 					total_duration_seconds=self.state.history.total_duration_seconds(),
 				)
 			)
+
+			if self.settings.save_playwright_script_path:
+				logger.info(
+					f'Agent run finished. Attempting to save Playwright script to: {self.settings.save_playwright_script_path}'
+				)
+				try:
+					# Extract sensitive data keys if sensitive_data is provided
+					keys = list(self.sensitive_data.keys()) if self.sensitive_data else None
+					# Pass browser and context config to the saving method
+					self.state.history.save_as_playwright_script(
+						self.settings.save_playwright_script_path,
+						sensitive_data_keys=keys,
+						browser_config=self.browser.config,
+						context_config=self.browser_context.config,
+					)
+				except Exception as script_gen_err:
+					# Log any error during script generation/saving
+					logger.error(f'Failed to save Playwright script: {script_gen_err}', exc_info=True)
 
 			await self.close()
 
@@ -1222,7 +1267,7 @@ class Agent(Generic[Context]):
 		test_answer = 'paris'
 		try:
 			# dont convert this to async! it *should* block any subsequent llm calls from running
-			response = self.llm.invoke([HumanMessage(content=test_prompt)])  # noqa: ASYNC
+			response = self.llm.invoke([HumanMessage(content=test_prompt)])  # noqa: RUF006
 			response_text = str(response.content).lower()
 
 			if test_answer in response_text:
@@ -1241,10 +1286,13 @@ class Agent(Generic[Context]):
 				raise Exception('LLM responded to a simple test question incorrectly')
 		except Exception as e:
 			self.llm._verified_api_keys = False
-			logger.error(
-				f'\n\n❌  LLM {self.llm.__class__.__name__} connection test failed. Check that {", ".join(required_keys)} is set correctly in .env and that the LLM API account has sufficient funding.\n\n{e}\n'
-			)
-			return False
+			if required_keys:
+				logger.error(
+					f'\n\n❌  LLM {self.llm.__class__.__name__} connection test failed. Check that {", ".join(required_keys)} is set correctly in .env and that the LLM API account has sufficient funding.\n\n{e}\n'
+				)
+				return False
+			else:
+				pass
 
 	async def _run_planner(self) -> Optional[str]:
 		"""Run the planner to analyze state and suggest next steps"""
