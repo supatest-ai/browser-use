@@ -54,6 +54,22 @@ function isUniqueCSSSelector(element, selector, logErrors = false) {
     return false;
   }
 }
+function hasDeterministicStarting(selector, options) {
+  const idString = "#";
+  const dataString = "data-";
+  try {
+    const startingParentSelector = selector.split(">")[0].trim() || "";
+    if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0 && (startingParentSelector.startsWith(idString) || startingParentSelector.includes(dataString))) {
+      return true;
+    }
+  } catch (error) {
+    if (options.logErrors) {
+      console.error("Could not check if selector has deterministic starting:", selector, error);
+    }
+    return false;
+  }
+  return false;
+}
 function isUniqueXPathSelector(element, xpath, logErrors = false) {
   try {
     const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
@@ -188,7 +204,7 @@ function getUniqueCssSelector(element, options) {
     }
     const combinedSelector = selectors.join(" > ");
     if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
-      if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
+      if (hasDeterministicStarting(combinedSelector, options)) {
         return combinedSelector;
       }
     }
@@ -199,7 +215,7 @@ function getUniqueCssSelector(element, options) {
   }
   const finalSelector = selectors.join(" > ");
   if (isUniqueCSSSelector(element, finalSelector, options.logErrors)) {
-    if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
+    if (hasDeterministicStarting(finalSelector, options)) {
       return finalSelector;
     }
   }
@@ -279,7 +295,7 @@ function getAllUniqueCssSelectors(element, options) {
     for (const path of paths) {
       const combinedSelector = path.selectors.join(" > ");
       if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
-        if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
+        if (hasDeterministicStarting(combinedSelector, options)) {
           allUniqueSelectors.add(combinedSelector);
         }
       }
@@ -331,8 +347,8 @@ function getXPath(element, options) {
     const id = currentElement.getAttribute("id");
     if (id && !isDynamicId(id)) {
       const idSelector = `[@id="${escapeAttribute(id)}"]`;
-      if (isUniqueXPathSelector(element, `//*${idSelector}`, options.logErrors)) {
-        step = `//*${idSelector}`;
+      if (isUniqueXPathSelector(currentElement, `//*${idSelector}`, options.logErrors)) {
+        step = `*${idSelector}`;
         steps.unshift(step);
         break;
       }
@@ -348,6 +364,27 @@ function getXPath(element, options) {
       steps.unshift(step);
       break;
     }
+    const siblings = currentElement.parentNode ? Array.from(currentElement.parentNode.children) : [];
+    const similiarSiblings = siblings.filter((sibling) => sibling.localName === currentElement.localName);
+    if (similiarSiblings.length > 1) {
+      const index = similiarSiblings.indexOf(currentElement) + 1;
+      step += `[${index}]`;
+    }
+    steps.unshift(step);
+    currentElement = currentElement.parentNode;
+  }
+  if (steps.length === 1 && steps[0].startsWith("svg")) {
+    return "//" + steps[0];
+  } else if (steps.length > 1 && steps[steps.length - 1].startsWith("svg")) {
+    steps.pop();
+  }
+  return "//" + steps.join("/");
+}
+function getAbsoluteXPath(element) {
+  const steps = [];
+  let currentElement = element;
+  while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
+    let step = currentElement.localName.toLowerCase();
     const siblings = currentElement.parentNode ? Array.from(currentElement.parentNode.children) : [];
     const similiarSiblings = siblings.filter((sibling) => sibling.localName === currentElement.localName);
     if (similiarSiblings.length > 1) {
@@ -738,6 +775,12 @@ function getAllUniqueSelectors(element, options = {}) {
   });
   if (xpathSelector) {
     allSelectors.push(`xpath=${xpathSelector}`);
+  }
+  if (!xpathSelector.startsWith("//html")) {
+    const absoluteXPath = getAbsoluteXPath(element);
+    if (absoluteXPath) {
+      allSelectors.push(`xpath=${absoluteXPath}`);
+    }
   }
   const modifiedSelectors = allSelectors.map((selector) => ({
     locatorValue: selector,
