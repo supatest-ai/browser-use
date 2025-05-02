@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Optional, Type, TypeVar, Tuple, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from playwright.async_api import Page, ElementHandle
+from patchright.async_api import Page, ElementHandle
 from pydantic import BaseModel
 
 from browser_use.controller.service import Controller

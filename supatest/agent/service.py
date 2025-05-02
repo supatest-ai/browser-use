@@ -27,7 +27,7 @@ from langchain_core.messages import BaseMessage
 from browser_use.agent.service import Agent
 from browser_use.exceptions import LLMException
 from browser_use.telemetry.views import AgentEndTelemetryEvent, AgentStepTelemetryEvent
-from browser_use.agent.views import AgentStepInfo, StepMetadata
+from browser_use.agent.views import ActionResult, AgentHistory, AgentStepInfo, StepMetadata
 from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
 from browser_use.browser.views import  BrowserError, BrowserState, BrowserStateHistory
@@ -290,7 +290,7 @@ class SupatestAgent(Agent[Context]):
             active_page = await self.browser_context.get_current_page()
             
             # generate procedural memory if needed
-            if self.settings.enable_memory and self.memory and self.state.n_steps % self.settings.memory_interval == 0:
+            if self.enable_memory and self.memory and self.state.n_steps % self.memory.config.memory_interval == 0:
                 self.memory.create_procedural_memory(self.state.n_steps)
             
             await self._raise_if_stopped_or_paused()
@@ -356,6 +356,30 @@ class SupatestAgent(Agent[Context]):
             # Planning action from LLM
             try:
                 model_output = await self.get_next_action(input_messages)
+                if (
+                    not model_output.action
+                    or not isinstance(model_output.action, list)
+                    or all(action.model_dump() == {} for action in model_output.action)
+                ):
+                    logger.warning('Model returned empty action. Retrying...')
+                    
+                    clarification_message = HumanMessage(
+                        content='You forgot to return an action. Please respond only with a valid JSON action according to the expected format.'
+                    )
+                    
+                    retry_messages = input_messages + [clarification_message]
+                    model_output = await self.get_next_action(retry_messages)
+                    
+                    if not model_output.action or all(action.model_dump() == {} for action in model_output.action):
+                        logger.warning('Model still returned empty after retry. Inserting safe noop action.')
+                        action_instance = self.DoneActionModel(
+                            done={
+                                'success': False,
+                                'text': 'No next action returned by LLM!',
+                            }
+                        )
+                        model_output.action = [action_instance]
+                
                 await self._check_eval_failure(model_output, step_info)
                 await self._log_response(model_output)
                 await self._send_subgoal_update(subgoal_id, False, model_output)
@@ -504,21 +528,6 @@ class SupatestAgent(Agent[Context]):
         )
         signal_handler.register()
         
-        # Wait for verification task to complete if it exists
-        if hasattr(self, '_verification_task') and not self._verification_task.done():
-            try:
-                await self._verification_task
-            except Exception:
-                # Error already logged in the task
-                pass
-                
-        # Check that verification was successful
-        assert self.llm._verified_api_keys or SKIP_LLM_API_KEY_VERIFICATION, (
-			'Failed to connect to LLM API or LLM API is not responding correctly'
-		)
-        
-     
-        
         try:
             self._log_agent_run()
 
@@ -601,8 +610,23 @@ class SupatestAgent(Agent[Context]):
                     await self.log_completion()
                     break
             else:
-                # unable to complete task in max steps ERROR
-                logger.info('❌ Failed to complete task in maximum steps')
+                error_message = 'Failed to complete task in maximum steps'
+                
+                self.state.history.history.append(
+					AgentHistory(
+						model_output=None,
+						result=[SupatestActionResult(error=error_message, include_in_memory=True)],
+						state=BrowserStateHistory(
+							url='',
+							title='',
+							tabs=[],
+							interacted_element=[],
+							screenshot=None,
+						),
+						metadata=None,
+					)
+				)
+               
                 if self.send_message:
                     await self._send_message("ERROR", "The agent was unable to complete the task within the allowed number of steps.")
 
@@ -630,6 +654,24 @@ class SupatestAgent(Agent[Context]):
 					total_duration_seconds=self.state.history.total_duration_seconds(),
 				)
 			)
+            
+            if self.settings.save_playwright_script_path:
+                logger.info(
+                    f'Agent run finished. Attempting to save Playwright script to: {self.settings.save_playwright_script_path}'
+                )
+                try:
+                    # Extract sensitive data keys if sensitive_data is provided
+                    keys = list(self.sensitive_data.keys()) if self.sensitive_data else None
+                    # Pass browser and context config to the saving method
+                    self.state.history.save_as_playwright_script(
+                        self.settings.save_playwright_script_path,
+                        sensitive_data_keys=keys,
+                        browser_config=self.browser.config,
+                        context_config=self.browser_context.config,
+                    )
+                except Exception as script_gen_err:
+                    # Log any error during script generation/saving
+                    logger.error(f'Failed to save Playwright script: {script_gen_err}', exc_info=True)
             
             await self._cleanup(max_steps)
             

@@ -178,10 +178,11 @@ class SupatestRegistry(Registry[Context]):
             elif isinstance(value, list):
                 return [replace_secrets(v) for v in value]
             return value
+        
+        params_dump = params.model_dump()
+        processed_params = replace_secrets(params_dump)
+        return type(params).model_validate(processed_params)
 
-        for key, value in params.model_dump().items():
-            params.__dict__[key] = replace_secrets(value)
-        return params
 
     # def get_prompt_description(self, page=None) -> str:
     #     """Get a description of all actions for the prompt

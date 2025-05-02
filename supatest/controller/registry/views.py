@@ -1,6 +1,6 @@
 from typing import Callable, Dict, Type
 from pydantic import BaseModel, ConfigDict, Field
-from playwright.async_api import Page
+from patchright.async_api import Page
 
 
 from browser_use.controller.registry.views import RegisteredAction, ActionRegistry
