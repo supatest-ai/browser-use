@@ -3,3 +3,63 @@ __pycache__
 *.pyc
 .git
 .env 
+# Ignore version control
+
+.git
+
+.gitignore
+
+
+
+# Python cache
+
+__pycache__/
+
+*.pyc
+
+*.pyo
+
+*.pyd
+
+*.pyc
+
+
+
+# Virtual environments
+
+env/
+
+venv/
+
+.venv/
+
+
+
+# OS-specific
+
+.DS_Store
+
+Thumbs.db
+
+
+
+# Editor-specific
+
+.vscode/
+
+.idea/
+
+
+
+# Ignore Docker-related files if not needed inside
+
+Dockerfile
+
+.dockerignore
+
+
+
+# Ignore test and debug logs
+
+*.log
+
