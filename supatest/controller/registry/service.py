@@ -1,5 +1,5 @@
 from inspect import signature
-from typing import Any, Dict, Generic, Optional, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel, Field, create_model
@@ -9,11 +9,9 @@ from browser_use.telemetry.views import (
     ControllerRegisteredFunctionsTelemetryEvent,
     RegisteredFunction,
 )
-from supatest.browser.context import SupatestBrowserContext
-
-from supatest.controller.registry.views import SupatestActionModel, SupatestActionRegistry, SupatestRegisteredAction
 from browser_use.utils import time_execution_async, time_execution_sync
-
+from supatest.browser.context import SupatestBrowserContext
+from supatest.controller.registry.views import SupatestActionModel, SupatestActionRegistry, SupatestRegisteredAction
 
 Context = TypeVar('Context')
 
@@ -162,9 +160,14 @@ class SupatestRegistry(Registry[Context]):
 
         """Replaces the sensitive data in the params"""
         # if there are any str with <secret>placeholder</secret> in the params, replace them with the actual value from sensitive_data
+        import logging
         import re
 
+        logger = logging.getLogger(__name__)
         secret_pattern = re.compile(r'<secret>(.*?)</secret>')
+        
+        # Set to track all missing placeholders across the full object
+        all_missing_placeholders = set()
 
         def replace_secrets(value):
             if isinstance(value, str):
@@ -172,6 +175,10 @@ class SupatestRegistry(Registry[Context]):
                 for placeholder in matches:
                     if placeholder in sensitive_data:
                         value = value.replace(f'<secret>{placeholder}</secret>', sensitive_data[placeholder])
+                    else:
+                        # Keep track of missing placeholders
+                        all_missing_placeholders.add(placeholder)
+                        # Don't replace the tag, keep it as is
                 return value
             elif isinstance(value, dict):
                 return {k: replace_secrets(v) for k, v in value.items()}
@@ -181,18 +188,14 @@ class SupatestRegistry(Registry[Context]):
         
         params_dump = params.model_dump()
         processed_params = replace_secrets(params_dump)
+
+		# Log a warning if any placeholders are missing
+        if all_missing_placeholders:
+            logger.warning(f'Missing or empty keys in sensitive_data dictionary: {", ".join(all_missing_placeholders)}')
+
         return type(params).model_validate(processed_params)
 
 
-    # def get_prompt_description(self, page=None) -> str:
-    #     """Get a description of all actions for the prompt
-
-	# 	If page is provided, only include actions that are available for that page
-	# 	based on their filter_func
-	# 	"""
-    #     return self.registry.get_prompt_description(page=page)
-    
-    
     def get_prompt_description(self, page=None) -> str:
         """Get a description of all actions for the prompt
 
