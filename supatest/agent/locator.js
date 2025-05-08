@@ -129,7 +129,7 @@ function isUniqueTextSelector(textSelectorElement, searchText) {
     if (matches > 1) break;
     const normalizedText = normalizeText(element.textContent || "");
     if (normalizedText) {
-      if (normalizedText.includes(searchText)) matches++;
+      if (normalizedText.toLowerCase().includes(searchText.toLowerCase())) matches++;
     }
   }
   return matches === 1;
@@ -190,7 +190,7 @@ function getUniqueCssSelector(element, options) {
   let currentElement = element;
   let depth = 0;
   const selectors = [];
-  const maxDepth = options.maxDepth || 6;
+  const maxDepth = options.maxDepth || 10;
   while (currentElement && depth < maxDepth) {
     const selector = getElementSelector(currentElement, options);
     if (selector) {
@@ -265,7 +265,7 @@ function getAllElementSelectors(element, options) {
 }
 function getAllUniqueCssSelectors(element, options) {
   const allUniqueSelectors = /* @__PURE__ */ new Set();
-  const maxDepth = options.maxDepth || 6;
+  const maxDepth = options.maxDepth || 10;
   const initialSelectors = getAllElementSelectors(element, options);
   let paths = [];
   if (initialSelectors.length > 0) {
@@ -282,7 +282,9 @@ function getAllUniqueCssSelectors(element, options) {
   } else {
     const nthOfTypeSelector = getNthOfTypeSelector(element);
     if (isUniqueCSSSelector(element, nthOfTypeSelector, options.logErrors)) {
-      allUniqueSelectors.add(nthOfTypeSelector);
+      if (hasDeterministicStarting(nthOfTypeSelector, options)) {
+        allUniqueSelectors.add(nthOfTypeSelector);
+      }
     }
     paths.push({
       selectors: [nthOfTypeSelector],
@@ -673,7 +675,7 @@ function generateLocatorDescription(element) {
 function getUniqueSelector(element, options = {}) {
   if (!(element instanceof Element)) return null;
   const {
-    maxDepth = 6,
+    maxDepth = 10,
     // Adjusted max depth
     dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
@@ -725,7 +727,7 @@ function getUniqueSelector(element, options = {}) {
 function getAllUniqueSelectors(element, options = {}) {
   if (!(element instanceof Element)) return [];
   const {
-    maxDepth = 6,
+    maxDepth = 10,
     // Adjusted max depth
     dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
