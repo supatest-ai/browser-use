@@ -14,7 +14,7 @@ function isDynamicId(id) {
   const randomPattern = /:\w+:/;
   const longNumbersPattern = /^\d{10,}$/;
   const reactPatterns = /^(rc[-_]|r[-_]|react[-_])/i;
-  const commonPrefixes = /^(ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_])/i;
+  const commonPrefixes = /^(ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_]|mantine[-_])/i;
   const randomSuffixes = /[-_][a-z0-9]{4,}$/i;
   const timeBasedIds = /\d{13,}$/;
   const isEntirelyNumbers = /^\d+$/;
