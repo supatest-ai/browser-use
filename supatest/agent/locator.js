@@ -9,6 +9,7 @@ function escapeAttribute(value, espaceDotsAndSpaces) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f").replace(/\./g, "\\.").replace(/\s/g, "\\ ");
 }
 function isDynamicId(id) {
+  const randomAlphanumericPattern = /^(?=.*[a-z])(?=.*[0-9])[a-z0-9]{8,}$|^[a-z0-9]{12,}$/i;
   const dynamicIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
   const randomPattern = /:\w+:/;
   const longNumbersPattern = /^\d{10,}$/;
@@ -17,7 +18,15 @@ function isDynamicId(id) {
   const randomSuffixes = /[-_][a-z0-9]{4,}$/i;
   const timeBasedIds = /\d{13,}$/;
   const isEntirelyNumbers = /^\d+$/;
-  return dynamicIdPattern.test(id) || randomPattern.test(id) || longNumbersPattern.test(id) || reactPatterns.test(id) || commonPrefixes.test(id) || randomSuffixes.test(id) || timeBasedIds.test(id) || isEntirelyNumbers.test(id);
+  const multipleCasePattern = /^(?=.*[A-Z].*[A-Z].*[A-Z])(?=.*[a-z].*[a-z].*[a-z])[a-zA-Z]+$/;
+  const semanticPattern = /^[a-z]+(?:[A-Z][a-z]*)*$|^[a-z]+(?:[-_][a-z]+)*$|^[a-z]+(?:__[a-z0-9]+)*$|^[a-z]+__[a-z]+(?:[-_][a-z]+)*$|^_[a-z]+(?:[-_][a-z]+)*$/i;
+  if (multipleCasePattern.test(id)) {
+    return true;
+  }
+  if (semanticPattern.test(id)) {
+    return false;
+  }
+  return randomAlphanumericPattern.test(id) || dynamicIdPattern.test(id) || randomPattern.test(id) || longNumbersPattern.test(id) || reactPatterns.test(id) || commonPrefixes.test(id) || randomSuffixes.test(id) || timeBasedIds.test(id) || isEntirelyNumbers.test(id);
 }
 function isDynamicClass(className) {
   const utilityPattern = /^(w-|h-|bg-|text-|p-|m-)/;
@@ -129,7 +138,7 @@ function isUniqueTextSelector(textSelectorElement, searchText) {
     if (matches > 1) break;
     const normalizedText = normalizeText(element.textContent || "");
     if (normalizedText) {
-      if (normalizedText.includes(searchText)) matches++;
+      if (normalizedText.toLowerCase().includes(searchText.toLowerCase())) matches++;
     }
   }
   return matches === 1;
@@ -190,7 +199,7 @@ function getUniqueCssSelector(element, options) {
   let currentElement = element;
   let depth = 0;
   const selectors = [];
-  const maxDepth = options.maxDepth || 6;
+  const maxDepth = options.maxDepth || 10;
   while (currentElement && depth < maxDepth) {
     const selector = getElementSelector(currentElement, options);
     if (selector) {
@@ -265,7 +274,7 @@ function getAllElementSelectors(element, options) {
 }
 function getAllUniqueCssSelectors(element, options) {
   const allUniqueSelectors = /* @__PURE__ */ new Set();
-  const maxDepth = options.maxDepth || 6;
+  const maxDepth = options.maxDepth || 10;
   const initialSelectors = getAllElementSelectors(element, options);
   let paths = [];
   if (initialSelectors.length > 0) {
@@ -282,7 +291,9 @@ function getAllUniqueCssSelectors(element, options) {
   } else {
     const nthOfTypeSelector = getNthOfTypeSelector(element);
     if (isUniqueCSSSelector(element, nthOfTypeSelector, options.logErrors)) {
-      allUniqueSelectors.add(nthOfTypeSelector);
+      if (hasDeterministicStarting(nthOfTypeSelector, options)) {
+        allUniqueSelectors.add(nthOfTypeSelector);
+      }
     }
     paths.push({
       selectors: [nthOfTypeSelector],
@@ -673,7 +684,7 @@ function generateLocatorDescription(element) {
 function getUniqueSelector(element, options = {}) {
   if (!(element instanceof Element)) return null;
   const {
-    maxDepth = 6,
+    maxDepth = 10,
     // Adjusted max depth
     dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
@@ -725,7 +736,7 @@ function getUniqueSelector(element, options = {}) {
 function getAllUniqueSelectors(element, options = {}) {
   if (!(element instanceof Element)) return [];
   const {
-    maxDepth = 6,
+    maxDepth = 10,
     // Adjusted max depth
     dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
