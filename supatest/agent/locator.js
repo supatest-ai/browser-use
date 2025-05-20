@@ -9,24 +9,17 @@ function escapeAttribute(value, espaceDotsAndSpaces) {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f").replace(/\./g, "\\.").replace(/\s/g, "\\ ");
 }
 function isDynamicId(id) {
-  const randomAlphanumericPattern = /^(?=.*[a-z])(?=.*[0-9])[a-z0-9]{8,}$|^[a-z0-9]{12,}$/i;
-  const dynamicIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
-  const randomPattern = /:\w+:/;
-  const longNumbersPattern = /^\d{10,}$/;
-  const reactPatterns = /^(rc[-_]|r[-_]|react[-_])/i;
-  const commonPrefixes = /^(ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_]|mantine[-_])/i;
-  const randomSuffixes = /[-_][a-z0-9]{4,}$/i;
-  const timeBasedIds = /\d{13,}$/;
+  const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
   const isEntirelyNumbers = /^\d+$/;
-  const multipleCasePattern = /^(?=.*[A-Z].*[A-Z].*[A-Z])(?=.*[a-z].*[a-z].*[a-z])[a-zA-Z]+$/;
-  const semanticPattern = /^[a-z]+(?:[A-Z][a-z]*)*$|^[a-z]+(?:[-_][a-z]+)*$|^[a-z]+(?:__[a-z0-9]+)*$|^[a-z]+__[a-z]+(?:[-_][a-z]+)*$|^_[a-z]+(?:[-_][a-z]+)*$/i;
-  if (multipleCasePattern.test(id)) {
-    return true;
-  }
-  if (semanticPattern.test(id)) {
-    return false;
-  }
-  return randomAlphanumericPattern.test(id) || dynamicIdPattern.test(id) || randomPattern.test(id) || longNumbersPattern.test(id) || reactPatterns.test(id) || commonPrefixes.test(id) || randomSuffixes.test(id) || timeBasedIds.test(id) || isEntirelyNumbers.test(id);
+  const timeBasedIds = /\d{13,}$/;
+  const libPrefixes = /^(rc[-_]|r[-_]|react[-_]|ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_]|mantine[-_])|kon[-_]|rf[-_]/i;
+  const randomColonsPattern = /:\w+:/;
+  const digitSuffix = /[-_](?=.*\d)[a-z\d]{4,}$/i;
+  const doubleUSuffix = /__(?=.*\d)[a-z\d]{4,}$/i;
+  const mixedAlphaPattern = /^(?=.*[a-z])(?=.*[A-Z])[A-Za-z]{10,}$/;
+  const randomAlphanumericPattern = /^(?=.*[a-z])(?=.*[0-9])[a-z0-9]{8,}$|^[a-z0-9]{12,}$/i;
+  const semanticPattern = /^_?[a-zA-Z][a-zA-Z0-9]*(?:([A-Z][a-zA-Z0-9]+)|([-_]{1,2}[a-zA-Z0-9]+))*$/;
+  return uuidPattern.test(id) || isEntirelyNumbers.test(id) || timeBasedIds.test(id) || libPrefixes.test(id) || randomColonsPattern.test(id) || digitSuffix.test(id) || doubleUSuffix.test(id) || mixedAlphaPattern.test(id) || randomAlphanumericPattern.test(id) || !semanticPattern.test(id);
 }
 function isDynamicClass(className) {
   const utilityPattern = /^(w-|h-|bg-|text-|p-|m-)/;
