@@ -87,6 +87,10 @@ class SupatestAgent(Agent[Context]):
         
         # Initialize state
         self.state = injected_agent_state or SupatesAgentState()
+
+        # Set tool calling method to function_calling by default
+        self.tool_calling_method = 'function_calling'
+        kwargs['tool_calling_method'] = self.tool_calling_method
         
         # If only browser is provided, create a SupatestBrowserContext
         if browser and not browser_context:
@@ -181,7 +185,7 @@ class SupatestAgent(Agent[Context]):
                 raise ValueError('Could not parse response.')
 
         elif self.tool_calling_method is None:
-            structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True)
+            structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method='function-calling')
             
             try: 
                 response: dict[str, Any] = await structured_llm.ainvoke(input_messages)  # type: ignore
@@ -282,7 +286,7 @@ class SupatestAgent(Agent[Context]):
         tokens = 0
         subgoal_id = uuid.uuid4()
         
-        logger.info(f'\n\n --------------------------------------')
+        logger.info('\n\n --------------------------------------')
         logger.info(f'📍 Step {self.state.n_steps} | Subgoal ID: {subgoal_id}')
 
         try:
