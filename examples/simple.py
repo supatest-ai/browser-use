@@ -1,16 +1,13 @@
+import asyncio
 import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import asyncio
-
 from dotenv import load_dotenv
 from langchain_openai import AzureChatOpenAI
 
 from supatest.agent.service import SupatestAgent
-
-load_dotenv()
 
 # Initialize the model
 llm = AzureChatOpenAI(

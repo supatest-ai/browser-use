@@ -15,11 +15,14 @@ jobs:
   tests:
     name: ${{matrix.test}} 
     runs-on: ubuntu-latest
+    env:
+      IN_DOCKER: 'True'
     strategy:
       matrix:
         test:
         # TODO:
         # - browser/patchright
+        # - browser/playwright
         # - browser/user_binary
         # - browser/remote_cdp
         # - models/openai
@@ -39,9 +42,12 @@ jobs:
         # - functionality/memory
         # - functionality/planner
         # - functionality/hooks
+        - test_browser
         - test_controller
+        - test_browser_session
         - test_tab_management
         - test_sensitive_data
+        - test_url_allowlist_security
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -52,7 +58,7 @@ jobs:
       - run: uv sync
 
       - name: Detect installed Playwright or Patchright version
-        run: echo "PLAYWRIGHT_VERSION=$(uv pip list --format json | jq -r '.[] | select(.name == "patchright") | .version')" >> $GITHUB_ENV
+        run: echo "PLAYWRIGHT_VERSION=$(uv pip list --format json | jq -r '.[] | select(.name == "playwright") | .version')" >> $GITHUB_ENV
 
       - name: Cache playwright binaries
         uses: actions/cache@v3
@@ -61,6 +67,7 @@ jobs:
             ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
 
-      - run: patchright install --no-shell chromium
+      - run: playwright install chrome
+      - run: playwright install chromium
 
       - run: pytest tests/${{ matrix.test }}.py
