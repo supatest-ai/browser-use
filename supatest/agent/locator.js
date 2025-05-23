@@ -2,19 +2,22 @@
 (domElement) => {
   // Utility functions
   // src/content/services/locators/locator.ts
-function escapeAttribute(value) {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f");
+function escapeAttribute(value, espaceDotsAndSpaces) {
+  if (!espaceDotsAndSpaces) {
+    return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f");
+  }
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\f/g, "\\f").replace(/\./g, "\\.").replace(/\s/g, "\\ ");
 }
 function isDynamicId(id) {
-  const dynamicIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
-  const randomPattern = /:\w+:/;
-  const longNumbersPattern = /^\d{10,}$/;
-  const reactPatterns = /^(rc[-_]|r[-_]|react[-_])/i;
-  const commonPrefixes = /^(ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_])/i;
-  const randomSuffixes = /[-_][a-z0-9]{4,}$/i;
+  const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}/i;
+  const isEntirelyNumbers = /^\d+$/;
   const timeBasedIds = /\d{13,}$/;
-  const containsNumbers = /\d+/;
-  return dynamicIdPattern.test(id) || randomPattern.test(id) || longNumbersPattern.test(id) || reactPatterns.test(id) || commonPrefixes.test(id) || randomSuffixes.test(id) || timeBasedIds.test(id) || containsNumbers.test(id);
+  const libPrefixes = /^(rc[-_]|r[-_]|react[-_]|ember\d+|vue[-_]|ng[-_]|ember[-_]|ext[-_]|comp[-_]|mantine[-_]|mui[-_]|chakra[-_]|ant[-_]|antd[-_]|bs[-_]|bootstrap[-_]|radix[-_]|headlessui[-_]|headless[-_]|p[-_]|prime[-_]|sui[-_]|semantic[-_])|kon[-_]|rf[-_]/i;
+  const randomColonsPattern = /:\w+:/;
+  const digitSuffix = /[-_](?=.*\d)[a-z\d]{4,}$/i;
+  const randomAlphanumericPattern = /^(?=.*[a-z])(?=.*[0-9])[a-z0-9]{8,}$|^[a-z0-9]{12,}$/i;
+  const semanticPattern = /^_?[a-zA-Z][a-zA-Z0-9]*(?:([A-Z][a-zA-Z0-9]+)|([-_]{1,2}[a-zA-Z0-9]+))*$/;
+  return uuidPattern.test(id) || isEntirelyNumbers.test(id) || timeBasedIds.test(id) || libPrefixes.test(id) || randomColonsPattern.test(id) || digitSuffix.test(id) || randomAlphanumericPattern.test(id) || !semanticPattern.test(id);
 }
 function isDynamicClass(className) {
   const utilityPattern = /^(w-|h-|bg-|text-|p-|m-)/;
@@ -50,6 +53,22 @@ function isUniqueCSSSelector(element, selector, logErrors = false) {
     }
     return false;
   }
+}
+function hasDeterministicStarting(selector, options) {
+  const idString = "#";
+  const dataString = "data-";
+  try {
+    const startingParentSelector = selector.split(">")[0].trim() || "";
+    if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0 && (startingParentSelector.startsWith(idString) || startingParentSelector.includes(dataString))) {
+      return true;
+    }
+  } catch (error) {
+    if (options.logErrors) {
+      console.error("Could not check if selector has deterministic starting:", selector, error);
+    }
+    return false;
+  }
+  return false;
 }
 function isUniqueXPathSelector(element, xpath, logErrors = false) {
   try {
@@ -110,7 +129,7 @@ function isUniqueTextSelector(textSelectorElement, searchText) {
     if (matches > 1) break;
     const normalizedText = normalizeText(element.textContent || "");
     if (normalizedText) {
-      if (normalizedText.includes(searchText)) matches++;
+      if (normalizedText.toLowerCase().includes(searchText.toLowerCase())) matches++;
     }
   }
   return matches === 1;
@@ -120,7 +139,8 @@ function getAttributeSelector(element, attributes, includeTag = true) {
   for (const attrName of attributes) {
     const attrValue = element.getAttribute(attrName);
     if (attrValue && !isDynamicAttr(attrName, attrValue)) {
-      const attrSelector = `[${attrName}="${escapeAttribute(attrValue)}"]`;
+      const espaceDotsAndSpaces = attrName.startsWith("data-");
+      const attrSelector = `[${attrName}="${escapeAttribute(attrValue, espaceDotsAndSpaces)}"]`;
       const selector = includeTag ? `${getElementTagName(element)}${attrSelector}` : attrSelector;
       if (isUniqueCSSSelector(element, selector)) {
         return selector;
@@ -170,7 +190,7 @@ function getUniqueCssSelector(element, options) {
   let currentElement = element;
   let depth = 0;
   const selectors = [];
-  const maxDepth = options.maxDepth || 6;
+  const maxDepth = options.maxDepth || 10;
   while (currentElement && depth < maxDepth) {
     const selector = getElementSelector(currentElement, options);
     if (selector) {
@@ -184,7 +204,7 @@ function getUniqueCssSelector(element, options) {
     }
     const combinedSelector = selectors.join(" > ");
     if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
-      if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
+      if (hasDeterministicStarting(combinedSelector, options)) {
         return combinedSelector;
       }
     }
@@ -195,7 +215,7 @@ function getUniqueCssSelector(element, options) {
   }
   const finalSelector = selectors.join(" > ");
   if (isUniqueCSSSelector(element, finalSelector, options.logErrors)) {
-    if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
+    if (hasDeterministicStarting(finalSelector, options)) {
       return finalSelector;
     }
   }
@@ -207,7 +227,8 @@ function getAllAttributeSelectors(element, attributes, includeTag = true) {
   for (const attrName of attributes) {
     const attrValue = element.getAttribute(attrName);
     if (attrValue && !isDynamicAttr(attrName, attrValue)) {
-      const attrSelector = `[${attrName}="${escapeAttribute(attrValue)}"]`;
+      const espaceDotsAndSpaces = attrName.startsWith("data-");
+      const attrSelector = `[${attrName}="${escapeAttribute(attrValue, espaceDotsAndSpaces)}"]`;
       const selector = includeTag ? `${getElementTagName(element)}${attrSelector}` : attrSelector;
       if (isUniqueCSSSelector(element, selector)) {
         selectors.push(selector);
@@ -244,7 +265,7 @@ function getAllElementSelectors(element, options) {
 }
 function getAllUniqueCssSelectors(element, options) {
   const allUniqueSelectors = /* @__PURE__ */ new Set();
-  const maxDepth = options.maxDepth || 6;
+  const maxDepth = options.maxDepth || 10;
   const initialSelectors = getAllElementSelectors(element, options);
   let paths = [];
   if (initialSelectors.length > 0) {
@@ -261,7 +282,9 @@ function getAllUniqueCssSelectors(element, options) {
   } else {
     const nthOfTypeSelector = getNthOfTypeSelector(element);
     if (isUniqueCSSSelector(element, nthOfTypeSelector, options.logErrors)) {
-      allUniqueSelectors.add(nthOfTypeSelector);
+      if (hasDeterministicStarting(nthOfTypeSelector, options)) {
+        allUniqueSelectors.add(nthOfTypeSelector);
+      }
     }
     paths.push({
       selectors: [nthOfTypeSelector],
@@ -274,7 +297,7 @@ function getAllUniqueCssSelectors(element, options) {
     for (const path of paths) {
       const combinedSelector = path.selectors.join(" > ");
       if (isUniqueCSSSelector(element, combinedSelector, options.logErrors)) {
-        if (options.deterministicLocatorCounter !== void 0 && options.deterministicLocatorCounter > 0) {
+        if (hasDeterministicStarting(combinedSelector, options)) {
           allUniqueSelectors.add(combinedSelector);
         }
       }
@@ -326,8 +349,8 @@ function getXPath(element, options) {
     const id = currentElement.getAttribute("id");
     if (id && !isDynamicId(id)) {
       const idSelector = `[@id="${escapeAttribute(id)}"]`;
-      if (isUniqueXPathSelector(element, `//*${idSelector}`, options.logErrors)) {
-        step = `//*${idSelector}`;
+      if (isUniqueXPathSelector(currentElement, `//*${idSelector}`, options.logErrors)) {
+        step = `*${idSelector}`;
         steps.unshift(step);
         break;
       }
@@ -343,6 +366,27 @@ function getXPath(element, options) {
       steps.unshift(step);
       break;
     }
+    const siblings = currentElement.parentNode ? Array.from(currentElement.parentNode.children) : [];
+    const similiarSiblings = siblings.filter((sibling) => sibling.localName === currentElement.localName);
+    if (similiarSiblings.length > 1) {
+      const index = similiarSiblings.indexOf(currentElement) + 1;
+      step += `[${index}]`;
+    }
+    steps.unshift(step);
+    currentElement = currentElement.parentNode;
+  }
+  if (steps.length === 1 && steps[0].startsWith("svg")) {
+    return "//" + steps[0];
+  } else if (steps.length > 1 && steps[steps.length - 1].startsWith("svg")) {
+    steps.pop();
+  }
+  return "//" + steps.join("/");
+}
+function getAbsoluteXPath(element) {
+  const steps = [];
+  let currentElement = element;
+  while (currentElement && currentElement.nodeType === Node.ELEMENT_NODE) {
+    let step = currentElement.localName.toLowerCase();
     const siblings = currentElement.parentNode ? Array.from(currentElement.parentNode.children) : [];
     const similiarSiblings = siblings.filter((sibling) => sibling.localName === currentElement.localName);
     if (similiarSiblings.length > 1) {
@@ -631,7 +675,7 @@ function generateLocatorDescription(element) {
 function getUniqueSelector(element, options = {}) {
   if (!(element instanceof Element)) return null;
   const {
-    maxDepth = 6,
+    maxDepth = 10,
     // Adjusted max depth
     dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
@@ -683,7 +727,7 @@ function getUniqueSelector(element, options = {}) {
 function getAllUniqueSelectors(element, options = {}) {
   if (!(element instanceof Element)) return [];
   const {
-    maxDepth = 6,
+    maxDepth = 10,
     // Adjusted max depth
     dataAttributes = ["data-test-id", "data-testid", "data-test", "data-qa", "data-cy"],
     nameAttributes = ["name", "title", "placeholder", "alt", "type", "href", "role"],
@@ -733,6 +777,12 @@ function getAllUniqueSelectors(element, options = {}) {
   });
   if (xpathSelector) {
     allSelectors.push(`xpath=${xpathSelector}`);
+  }
+  if (!xpathSelector.startsWith("//html")) {
+    const absoluteXPath = getAbsoluteXPath(element);
+    if (absoluteXPath) {
+      allSelectors.push(`xpath=${absoluteXPath}`);
+    }
   }
   const modifiedSelectors = allSelectors.map((selector) => ({
     locatorValue: selector,
