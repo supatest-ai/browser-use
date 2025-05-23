@@ -327,18 +327,9 @@ class BrowserContext:
 			self._page_event_handler = None
 
 	def __del__(self):
-		"""Cleanup when object is destroyed"""
-		if not self.config.keep_alive and self.session is not None:
-			logger.debug('BrowserContext was not properly closed before destruction')
-			try:
-				# Use sync Playwright method for force cleanup
-				if hasattr(self.session.context, '_impl_obj'):
-					asyncio.run(self.session.context._impl_obj.close())
-
-				self.session = None
-				gc.collect()
-			except Exception as e:
-				logger.warning(f'Failed to force close browser context: {e}')
+		"""Cleanup when object is destroyed - Avoid async operations"""
+		# Do not attempt async cleanup here to prevent event loop conflicts
+		pass
 
 	@time_execution_async('--initialize_session')
 	async def _initialize_session(self):

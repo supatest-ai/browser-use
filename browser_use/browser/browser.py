@@ -330,9 +330,11 @@ class Browser:
 			if self.playwright:
 				await self.playwright.stop()
 				del self.playwright
+			if hasattr(self, '_http_client'):
+				await self._http_client.aclose()
 			if chrome_proc := getattr(self, '_chrome_subprocess', None):
 				try:
-					# always kill all children processes, otherwise chrome leaves a bunch of zombie processes
+					# Always kill all children processes, otherwise chrome leaves a bunch of zombie processes
 					for proc in chrome_proc.children(recursive=True):
 						proc.kill()
 					chrome_proc.kill()
@@ -343,7 +345,6 @@ class Browser:
 			await self.cleanup_httpx_clients()
 		except Exception as e:
 			logger.debug(f'Failed to close browser properly: {e}')
-
 		finally:
 			self.playwright_browser = None
 			self.playwright = None
@@ -351,16 +352,9 @@ class Browser:
 			gc.collect()
 
 	def __del__(self):
-		"""Async cleanup when object is destroyed"""
-		try:
-			if self.playwright_browser or self.playwright:
-				loop = asyncio.get_running_loop()
-				if loop.is_running():
-					loop.create_task(self.close())
-				else:
-					asyncio.run(self.close())
-		except Exception as e:
-			logger.debug(f'Failed to cleanup browser in destructor: {e}')
+		"""Cleanup when object is destroyed - Avoid async operations"""
+		# Do not attempt async cleanup here to prevent event loop conflicts
+		pass
 
 	async def cleanup_httpx_clients(self):
 		"""Cleanup all httpx clients"""

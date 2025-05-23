@@ -38,9 +38,8 @@ class Executor:
         )
 
     async def stop_agent(self):
-        """
-        Stop the agent by calling `agent.stop()` and canceling the task if it exists.
-        """
+        """Stop the agent and ensure proper cleanup"""
+        self.is_stopping = True
         if self.agent:
             try:
                 await self.agent.stop()
@@ -52,6 +51,12 @@ class Executor:
                 await asyncio.sleep(0.5)  # Give a small window for cleanup
             except Exception as e:
                 logger.error(f"Error canceling agent task: {str(e)}")
+        # Ensure browser cleanup only after task completion
+        if hasattr(self, 'browser') and self.browser:
+            try:
+                await self.browser.close()
+            except Exception as e:
+                logger.error(f"Error closing browser: {str(e)}")
 
     async def _handle_reconnection(self, error_msg=None):
         """Centralized reconnection logic"""
@@ -119,7 +124,10 @@ class Executor:
         async def disconnect(reason=None):
             logger.info(f"Disconnected from automation server: {reason}")
             if not self.is_stopping:
-                await self._handle_reconnection()
+                # Do not stop agent immediately on disconnect to avoid mid-task closures
+                logger.info("Connection lost, but not stopping agent to preserve task state.")
+                # Optionally, trigger reconnection logic instead of stopping
+                # await self._handle_reconnection()
 
         @self.sio.on("connect_error")
         async def on_connect_error(error):
@@ -257,4 +265,3 @@ class Executor:
             await self.handler.emit_automation_error(
                 None, goal_id, str(e), setup_data.request_id, setup_data.test_case_id
             )
-
