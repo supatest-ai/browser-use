@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+from importlib import resources
 
 from browser_use.browser.browser import Browser
 from browser_use.browser.context import BrowserContext
@@ -20,6 +21,7 @@ class SupatestBrowserContext(BrowserContext):
     ):
         super().__init__(browser, config, state)
         self.active_page_id = active_page_id
+        self.locator_js_code = resources.files('supatest.agent').joinpath('locator.js').read_text()
 
     async def _initialize_session(self):
         """Initialize the browser session with Supatest extensions"""
@@ -33,6 +35,9 @@ class SupatestBrowserContext(BrowserContext):
         pages = context.pages
         logger.info(f'active_page_id received: {self.active_page_id}')
         logger.info(f'available pages: {pages}')
+        
+        for page in pages:
+            await page.evaluate(self.locator_js_code)
         
         # making the tabId 0 as default 
         tabId = 0

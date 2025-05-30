@@ -145,8 +145,6 @@ class SupatestAgent(Agent[Context]):
             state=self.state.message_manager_state,
         )
         
-        self.locator_js_code = resources.files('supatest.agent').joinpath('locator.js').read_text()
-
     def _setup_action_models(self) -> None:
         """Setup dynamic action models from controller's registry using our extended SupatestAgentOutput"""
         # Initially only include actions with no filters
@@ -754,9 +752,9 @@ class SupatestAgent(Agent[Context]):
                 if element_handle is None:
                     raise BrowserError(f'Element: {repr(element_node)} not found')
                 
-                eval_element = await element_handle.evaluate(self.locator_js_code)
-                locator = eval_element['locator']
-                all_unique_locators = eval_element['allUniqueLocators']
+                locator_data = await element_handle.evaluate("el => window?.__agentLocatorGenerator__?.getLocatorData(el)", element_handle)
+                locator = locator_data['locator']
+                all_unique_locators = locator_data['allUniqueLocators']
                 logger.debug(f'Locator: {locator}')
                 logger.debug(f'All Unique Locators: {all_unique_locators}')
 
