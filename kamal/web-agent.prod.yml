@@ -1,0 +1,11 @@
+ssh:
+  user: root
+  proxy_command: "ssh -W %h:%p -i digitalocean_staging.pem root@146.190.192.33"
+  keys: [ "digitalocean_staging.pem" ]
+
+servers:
+  web:
+    proxy: true
+    hosts:
+      - 152.42.242.207
+    

@@ -193,3 +193,6 @@ gcp-login.json
 *.jsonl
 
 uv.lock
+
+aws_staging.pem
+digitalocean_staging.pem
