@@ -30,5 +30,6 @@ env:
   secret:
     - AZURE_OPENAI_API_KEY
     - AZURE_OPENAI_ENDPOINT
+    - LMNR_PROJECT_API_KEY
   clear:
     PORT: 8765
