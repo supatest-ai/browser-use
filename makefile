@@ -39,3 +39,6 @@ deploy-agent: set-config
 		--region $(REGION)
 
 release-agent: set-config build push deploy-agent
+
+release-agent-new:
+	set -a; source .env.$(ENV); set +a; kamal deploy -c kamal/web-agent.yml -d $(ENV)
