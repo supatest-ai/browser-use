@@ -20,5 +20,8 @@ RUN pip install --no-cache-dir -e ".[dev]"
 # Expose Socket.IO port
 EXPOSE 8765
 
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8765/ || exit 1
+
 # Command to run the server
 CMD ["python", "supatest/server.py"] 
