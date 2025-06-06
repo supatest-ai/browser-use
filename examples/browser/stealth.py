@@ -22,11 +22,15 @@ terminal_width, terminal_height = shutil.get_terminal_size((80, 20))
 
 
 async def main():
+	patchright = await async_patchright().start()
+
+	print('\n\nNORMAL BROWSER:')
 	# Default Playwright Chromium Browser
 	normal_browser_session = BrowserSession(
 		# executable_path=<defaults to playwright builtin browser stored in ms-cache directory>,
 		user_data_dir=None,
 		headless=False,
+		stealth=False,
 		# deterministic_rendering=False,
 		# disable_security=False,
 	)
@@ -41,8 +45,8 @@ async def main():
 	patchright_browser_session = BrowserSession(
 		# cdp_url='wss://browser.zenrows.com?apikey=your-api-key-here&proxy_region=na',
 		#                or try anchor browser, browserless, steel.dev, browserbase, oxylabs, brightdata, etc.
-		playwright=await async_patchright().start(),
 		user_data_dir='~/.config/browseruse/profiles/stealth',
+		stealth=True,
 		headless=False,
 		disable_security=False,
 		deterministic_rendering=False,
@@ -75,11 +79,12 @@ async def main():
 		print('\n\nBRAVE + PATCHRIGHT STEALTH BROWSER:')
 		brave_patchright_browser_session = BrowserSession(
 			executable_path='/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-			playwright=await async_patchright().start(),
+			playwright=patchright,
 			headless=False,
 			disable_security=False,
 			user_data_dir=None,
 			deterministic_rendering=False,
+			# **patchright.devices['iPhone 13'],  # emulate other devices: https://playwright.dev/python/docs/emulation
 		)
 		await brave_patchright_browser_session.start()
 		await brave_patchright_browser_session.create_new_tab('https://abrahamjuliot.github.io/creepjs/')

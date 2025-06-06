@@ -14,9 +14,8 @@ llm = AzureChatOpenAI(
 	model='gpt-4o',
 	temperature=0.0,
 )
-task = 'Go to kayak.com and find the cheapest flight from Zurich to San Francisco on 2025-05-01'
-
-agent = SupatestAgent(task=task, llm=llm)
+task = 'Go to kayak.com and find the cheapest one-way flight from Zurich to San Francisco in 3 weeks.'
+agent = Agent(task=task, llm=llm)
 
 
 async def main():
