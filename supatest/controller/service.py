@@ -9,8 +9,9 @@ from pydantic import BaseModel
 
 from browser_use.controller.service import Controller
 from browser_use.utils import time_execution_sync
+from browser_use.browser import BrowserSession
 
-from supatest.browser.context import SupatestBrowserContext
+from supatest.browser.context import SupatestBrowserSession
 from supatest.agent.views import SupatestActionResult
 from supatest.controller.registry.service import SupatestRegistry
 from supatest.controller.views import (
@@ -39,7 +40,7 @@ class SupatestController(Controller[Context]):
     def __init__(
         self,
         exclude_actions: list[str] = [],
-        output_model: Optional[Type[BaseModel]] = None,
+        output_model: type[BaseModel] | None = None,
     ):
         # Initialize with our custom Registry instead of the base one
         self.registry = SupatestRegistry[Context](exclude_actions)
@@ -67,49 +68,51 @@ class SupatestController(Controller[Context]):
                 return SupatestActionResult(is_done=True, success=params.success, extracted_content=params.text)
 
         @self.registry.action('Navigate to URL in the current tab', param_model=GoToUrlAction)
-        async def go_to_url(params: GoToUrlAction, browser: SupatestBrowserContext):
-            page = await browser.get_current_page()
-            await page.goto(params.url)
-            await page.wait_for_load_state()
+        async def go_to_url(params: GoToUrlAction, browser_session: SupatestBrowserSession):
+            page = await browser_session.get_current_page()
+            if page:
+                await page.goto(params.url)
+                await page.wait_for_load_state()
+            else:
+                page = await browser_session.create_new_tab(params.url)
             msg = f'🔗  Navigated to {params.url}'
             logger.info(msg)
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Go back', param_model=GoBackAction)
-        async def go_back(_: GoBackAction, browser: SupatestBrowserContext):
-            await browser.go_back()
+        async def go_back(params: GoBackAction, browser_session: SupatestBrowserSession):
+            await browser_session.go_back()
             msg = '🔙  Navigated back'
             logger.info(msg)
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Wait for x seconds default 3', param_model=WaitAction)
-        async def wait(params: WaitAction, browser: SupatestBrowserContext):
-            page = await browser.get_current_page()
+        async def wait(params: WaitAction, browser_session: SupatestBrowserSession):
+            page = await browser_session.get_current_page()
             await page.wait_for_timeout(params.seconds * 1000)
             msg = f'🕒  Waiting for {params.seconds} seconds'
             logger.info(msg)
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Click element by index', param_model=ClickElementAction)
-        async def click_element_by_index(params: ClickElementAction, browser: SupatestBrowserContext):
-            session = await browser.get_session()
-            element_node = None
+        async def click_element_by_index(params: ClickElementAction, browser_session: SupatestBrowserSession):
+            # Browser is now a BrowserSession itself
 
-            if element_node is None:
-                if params.index not in await browser.get_selector_map():
-                    message = f'Element with index {params.index} does not exist - retry or use alternative actions'
-                    return SupatestActionResult(error=message, isExecuted='failure')
-                element_node = await browser.get_dom_element_by_index(params.index)
+            if params.index not in await browser_session.get_selector_map():
+                message = f'Element with index {params.index} does not exist - retry or use alternative actions'
+                return SupatestActionResult(error=message, isExecuted='failure')
+            
+            element_node = await browser_session.get_dom_element_by_index(params.index)
+            initial_pages = len(browser_session.tabs)
 
-            initial_pages = len(session.context.pages)
-
-            if await browser.is_file_uploader(element_node):
+            # if element has file uploader then dont click
+            if await browser_session.find_file_upload_element_by_index(params.index) is not None:
                 msg = f'Index {params.index} - has an element which opens file upload dialog'
                 logger.info(msg)
                 return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
             try:
-                download_path = await browser._click_element_node(element_node)
+                download_path = await browser_session._click_element_node(element_node)
                 if download_path:
                     msg = f'💾  Downloaded file to {download_path}'
                 else:
@@ -118,28 +121,24 @@ class SupatestController(Controller[Context]):
 
                 logger.info(msg)
                 logger.debug(f'Element xpath: {element_node.xpath}')
-                
-                # if len(session.context.pages) > initial_pages:
-                #     new_tab_msg = 'New tab opened - switching to it'
-                #     msg += f' - {new_tab_msg}'
-                #     logger.info(new_tab_msg)
-                #     await browser.switch_to_tab(-1)
+                if len(browser_session.tabs) > initial_pages:
+                    new_tab_msg = 'New tab opened - switching to it'
+                    msg += f' - {new_tab_msg}'
+                    logger.info(new_tab_msg)
+                    await browser_session.switch_to_tab(-1)
                 return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
             except Exception as e:
-                logger.warning(f'Element not clickable - most likely the page changed')
+                logger.warning(f'Element not clickable with index {params.index} - most likely the page changed')
                 return SupatestActionResult(error=str(e), isExecuted='failure')
 
         @self.registry.action('Input text into an interactive element', param_model=InputTextAction)
-        async def input_text(params: InputTextAction, browser: SupatestBrowserContext, has_sensitive_data: bool = False):
-            element_node = None
-            if element_node is None:
-                if params.index not in await browser.get_selector_map():
-                    message = f'Element index {params.index} does not exist - retry or use alternative actions'
-                    SupatestActionResult(error=message, isExecuted='failure')
-                    raise Exception(message)
-                element_node = await browser.get_dom_element_by_index(params.index)
-
-            await browser._input_text_element_node(element_node, params.text)
+        async def input_text(params: InputTextAction, browser_session: SupatestBrowserSession, has_sensitive_data: bool = False):
+            if params.index not in await browser_session.get_selector_map():
+                message = f'Element index {params.index} does not exist - retry or use alternative actions'
+                return SupatestActionResult(error=message, isExecuted='failure')
+            
+            element_node = await browser_session.get_dom_element_by_index(params.index)
+            await browser_session._input_text_element_node(element_node, params.text)
             
             if not has_sensitive_data:
                 msg = f'⌨️  Input {params.text} into element'
@@ -169,35 +168,44 @@ class SupatestController(Controller[Context]):
         #     return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Scroll down the page by pixel amount - if no amount is specified, scroll down one page', param_model=ScrollAction)
-        async def scroll_down(params: ScrollAction, browser: SupatestBrowserContext):
-            page = await browser.get_current_page()
-            if params.amount is not None:
-                await page.evaluate(f'window.scrollBy(0, {params.amount});')
-            else:
-                await page.evaluate('window.scrollBy(0, window.innerHeight);')
+        async def scroll_down(params: ScrollAction, browser_session: SupatestBrowserSession):
+            """
+            (a) Use browser._scroll_container for container-aware scrolling.
+            (b) If that JavaScript throws, fall back to window.scrollBy().
+            """
+            page = await browser_session.get_current_page()
+            dy = params.amount or await page.evaluate('() => window.innerHeight')
 
-            amount = f'{params.amount} pixels' if params.amount is not None else 'one page'
-            msg = f'🔍  Scrolled down the page by {amount}'
+            try:
+                await browser_session._scroll_container(dy)
+            except Exception as e:
+                # Hard fallback: always works on root scroller
+                await page.evaluate('(y) => window.scrollBy(0, y)', dy)
+                logger.debug('Smart scroll failed; used window.scrollBy fallback', exc_info=e)
+
+            amount_str = f'{params.amount} pixels' if params.amount is not None else 'one page'
+            msg = f'🔍 Scrolled down the page by {amount_str}'
             logger.info(msg)
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Scroll up the page by pixel amount - if no amount is specified, scroll up one page', param_model=ScrollAction)
-        async def scroll_up(params: ScrollAction, browser: SupatestBrowserContext):
-            page = await browser.get_current_page()
-            if params.amount is not None:
-                await page.evaluate(f'window.scrollBy(0, -{params.amount});')
-            else:
-                await page.evaluate('window.scrollBy(0, -window.innerHeight);')
+        async def scroll_up(params: ScrollAction, browser_session: SupatestBrowserSession):
+            page = await browser_session.get_current_page()
+            dy = -(params.amount or await page.evaluate('() => window.innerHeight'))
 
-            amount = f'{params.amount} pixels' if params.amount is not None else 'one page'
-            msg = f'🔍  Scrolled up the page by {amount}'
+            try:
+                await browser_session._scroll_container(dy)
+            except Exception as e:
+                await page.evaluate('(y) => window.scrollBy(0, y)', dy)
+                logger.debug('Smart scroll failed; used window.scrollBy fallback', exc_info=e)
+
+            amount_str = f'{params.amount} pixels' if params.amount is not None else 'one page'
+            msg = f'🔍 Scrolled up the page by {amount_str}'
             logger.info(msg)
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Send keyboard keys', param_model=SendKeysAction)
-        async def send_keys(params: SendKeysAction, browser: SupatestBrowserContext):
-            page = await browser.get_current_page()
-
+        async def send_keys(params: SendKeysAction, page: Page):
             try:
                 await page.keyboard.press(params.keys)
             except Exception as e:
@@ -218,10 +226,10 @@ class SupatestController(Controller[Context]):
             description='Get all options from a native dropdown',
             param_model=GetDropdownOptionsAction,
         )
-        async def get_dropdown_options(params: GetDropdownOptionsAction, browser: SupatestBrowserContext) -> SupatestActionResult:
+        async def get_dropdown_options(params: GetDropdownOptionsAction, browser_session: SupatestBrowserSession) -> SupatestActionResult:
             """Get all options from a native dropdown"""
-            page = await browser.get_current_page()
-            selector_map = await browser.get_selector_map()
+            page = await browser_session.get_current_page()
+            selector_map = await browser_session.get_selector_map()
             dom_element = selector_map[params.index]
 
             try:
@@ -291,11 +299,11 @@ class SupatestController(Controller[Context]):
         )
         async def select_dropdown_option(
             params: SelectDropdownOptionAction,
-            browser: SupatestBrowserContext,
+            browser_session: SupatestBrowserSession,
         ) -> SupatestActionResult:
             """Select dropdown option by the text of the option you want to select"""
-            page = await browser.get_current_page()
-            selector_map = await browser.get_selector_map()
+            page = await browser_session.get_current_page()
+            selector_map = await browser_session.get_selector_map()
             dom_element = selector_map[params.index]
 
             # Validate that we're working with a select element
@@ -385,7 +393,7 @@ class SupatestController(Controller[Context]):
             'Drag and drop elements or between coordinates on the page - useful for canvas drawing, sortable lists, sliders, file uploads, and UI rearrangement',
             param_model=DragDropAction,
         )
-        async def drag_drop(params: DragDropAction, browser: SupatestBrowserContext) -> SupatestActionResult:
+        async def drag_drop(params: DragDropAction, browser_session: SupatestBrowserSession) -> SupatestActionResult:
             """
             Performs a precise drag and drop operation between elements or coordinates.
             """
@@ -394,11 +402,12 @@ class SupatestController(Controller[Context]):
                 page: Page,
                 source_selector: str,
                 target_selector: str,
-            ) -> Tuple[Optional[ElementHandle], Optional[ElementHandle]]:
+            ) -> tuple[ElementHandle | None, ElementHandle | None]:
                 """Get source and target elements with appropriate error handling."""
                 source_element = None
                 target_element = None
 
+                # Find source element
                 try:
                     # page.locator() auto-detects CSS and XPath
                     source_locator = page.locator(source_selector)
@@ -428,9 +437,9 @@ class SupatestController(Controller[Context]):
             async def get_element_coordinates(
                 source_element: ElementHandle,
                 target_element: ElementHandle,
-                source_position: Optional[Position],
-                target_position: Optional[Position],
-            ) -> Tuple[Optional[Tuple[int, int]], Optional[Tuple[int, int]]]:
+                source_position: Position | None,
+                target_position: Position | None,
+            ) -> tuple[tuple[int, int] | None, tuple[int, int] | None]:
                 """Get coordinates from elements with appropriate error handling."""
                 source_coords = None
                 target_coords = None
@@ -444,8 +453,11 @@ class SupatestController(Controller[Context]):
                         if source_box:
                             source_coords = (
                                 int(source_box['x'] + source_box['width'] / 2),
-                                int(source_box['y'] + source_box['height'] / 2),
+                                int(source_box['y'] + source_box['height'] / 2)
                             )
+                except Exception as e:
+                    logger.debug(f"Error getting source coordinates: {e}")
+                    return None, None
 
                     # Get target coordinates
                     if target_position:
@@ -455,10 +467,11 @@ class SupatestController(Controller[Context]):
                         if target_box:
                             target_coords = (
                                 int(target_box['x'] + target_box['width'] / 2),
-                                int(target_box['y'] + target_box['height'] / 2),
+                                int(target_box['y'] + target_box['height'] / 2)
                             )
                 except Exception as e:
-                    logger.error(f'Error getting element coordinates: {str(e)}')
+                    logger.debug(f"Error getting target coordinates: {e}")
+                    return source_coords, None
 
                 return source_coords, target_coords
 
@@ -470,7 +483,7 @@ class SupatestController(Controller[Context]):
                 target_y: int,
                 steps: int,
                 delay_ms: int,
-            ) -> Tuple[bool, str]:
+            ) -> tuple[bool, str]:
                 """Execute the drag operation with comprehensive error handling."""
                 try:
                     # Try to move to source position
@@ -509,7 +522,7 @@ class SupatestController(Controller[Context]):
                 except Exception as e:
                     return False, f'Error during drag operation: {str(e)}'
 
-            page = await browser.get_current_page()
+            page = await browser_session.get_current_page()
 
             try:
                 # Initialize variables
@@ -599,40 +612,47 @@ class SupatestController(Controller[Context]):
     async def act(
         self,
         action: BaseModel,  # Using BaseModel instead of ActionModel to support both formats
-        browser_context: SupatestBrowserContext,
-        page_extraction_llm: Optional[BaseChatModel] = None,
-        sensitive_data: Optional[Dict[str, str]] = None,
-        available_file_paths: Optional[list[str]] = None,
+        browser_session: SupatestBrowserSession,
+        page_extraction_llm: BaseChatModel | None = None,
+        sensitive_data: dict[str, str] | None = None,
+        available_file_paths: list[str] | None = None,
         context: Context | None = None,
     ) -> SupatestActionResult:
-        """Execute an action with supatest support"""
+        """Execute an action using the custom Supatest registry"""
         try:
-            # Process action in the new non-nested format
-            action_data = action.model_dump(exclude_unset=True)
-            for action_name, params in action_data.items():
+            # Process the action using the base controller logic but with our custom result processing
+            for action_name, params in action.model_dump(exclude_unset=True).items():
                 if params is not None:
-                    # Execute the action
                     result = await self.registry.execute_action(
-                        action_name,
-                        params,
-                        browser=browser_context,
+                        action_name=action_name,
+                        params=params,
+                        browser_session=browser_session,
                         page_extraction_llm=page_extraction_llm,
                         sensitive_data=sensitive_data,
                         available_file_paths=available_file_paths,
                         context=context,
                     )
-                    return self._process_result(result)
+
+                    # Convert result to SupatestActionResult if needed
+                    if isinstance(result, str):
+                        return SupatestActionResult(extracted_content=result)
+                    elif isinstance(result, SupatestActionResult):
+                        return result
+                    elif result is None:
+                        return SupatestActionResult()
+                    else:
+                        return self._process_result(result)
             return SupatestActionResult()
         except Exception as e:
-            raise e
+            return SupatestActionResult(error=str(e), isExecuted='failure')
 
     def _process_result(self, result):
-        """Process the result of an action execution"""
-        if isinstance(result, str):
-            return SupatestActionResult(extracted_content=result)
-        elif isinstance(result, SupatestActionResult):
-            return result
-        elif result is None:
-            return SupatestActionResult()
+        """Convert any result to SupatestActionResult"""
+        if hasattr(result, 'extracted_content'):
+            return SupatestActionResult(
+                extracted_content=result.extracted_content,
+                include_in_memory=getattr(result, 'include_in_memory', False),
+                isExecuted='success' if not hasattr(result, 'error') else 'failure'
+            )
         else:
-            raise ValueError(f'Invalid action result type: {type(result)} of {result}') 
+            return SupatestActionResult(extracted_content=str(result), isExecuted='success') 

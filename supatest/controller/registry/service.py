@@ -9,7 +9,7 @@ from browser_use.telemetry.views import (
     ControllerRegisteredFunctionsTelemetryEvent,
     RegisteredFunction,
 )
-from supatest.browser.context import SupatestBrowserContext
+from supatest.browser.context import SupatestBrowserSession
 
 from supatest.controller.registry.views import SupatestActionModel, SupatestActionRegistry, SupatestRegisteredAction
 from browser_use.utils import time_execution_async, time_execution_sync
@@ -28,7 +28,7 @@ class SupatestRegistry(Registry[Context]):
         self.registry = SupatestActionRegistry()
     
     # Override the action decorator to use SupatestRegisteredAction
-    def action(self, description: str, param_model: Optional[Type[BaseModel]] = None):
+    def action(self, description: str, param_model: type[BaseModel] | None = None):
         """Decorator for registering actions with supatest format"""
         def decorator(func):
             if self.exclude_actions and func.__name__ in self.exclude_actions:
@@ -53,7 +53,7 @@ class SupatestRegistry(Registry[Context]):
         return decorator
     
     @time_execution_sync('--create_action_model')
-    def create_action_model(self, include_actions: Optional[list[str]] = None, page=None) -> Type[SupatestActionModel]:
+    def create_action_model(self, include_actions: list[str] | None = None, page=None) -> type[SupatestActionModel]:
         """Creates a Pydantic model from registered actions, used by LLM APIs that support tool calling & enforce a schema"""
 
         # Filter actions based on page if provided:
@@ -80,7 +80,7 @@ class SupatestRegistry(Registry[Context]):
 
         fields = {
             name: (
-                Optional[action.param_model],
+                action.param_model | None,
                 Field(default=None, description=action.description),
             )
             for name, action in available_actions.items()
@@ -102,10 +102,10 @@ class SupatestRegistry(Registry[Context]):
         self,
         action_name: str,
         params: dict,
-        browser: Optional[SupatestBrowserContext] = None,
-        page_extraction_llm: Optional[BaseChatModel] = None,
-        sensitive_data: Optional[Dict[str, str]] = None,
-        available_file_paths: Optional[list[str]] = None,
+        browser_session: SupatestBrowserSession | None = None,
+        page_extraction_llm: BaseChatModel | None = None,
+        sensitive_data: dict[str, str] | None = None,
+        available_file_paths: list[str] | None = None,
         context: Context | None = None,
     ) -> Any:
         """Execute a registered action with supatest format"""
@@ -128,8 +128,8 @@ class SupatestRegistry(Registry[Context]):
                 validated_params = self._replace_sensitive_data(validated_params, sensitive_data)
 
             # Check if required parameters are provided
-            if 'browser' in parameter_names and not browser:
-                raise ValueError(f'Action {action_name} requires browser but none provided.')
+            if 'browser_session' in parameter_names and not browser_session:
+                raise ValueError(f'Action {action_name} requires browser_session but none provided.')
             if 'page_extraction_llm' in parameter_names and not page_extraction_llm:
                 raise ValueError(f'Action {action_name} requires page_extraction_llm but none provided.')
             if 'available_file_paths' in parameter_names and not available_file_paths:
@@ -141,8 +141,8 @@ class SupatestRegistry(Registry[Context]):
             extra_args = {}
             if 'context' in parameter_names:
                 extra_args['context'] = context
-            if 'browser' in parameter_names:
-                extra_args['browser'] = browser
+            if 'browser_session' in parameter_names:
+                extra_args['browser_session'] = browser_session
             if 'page_extraction_llm' in parameter_names:
                 extra_args['page_extraction_llm'] = page_extraction_llm
             if 'available_file_paths' in parameter_names:
@@ -158,7 +158,7 @@ class SupatestRegistry(Registry[Context]):
         except Exception as e:
             raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e
         
-    def _replace_sensitive_data(self, params: BaseModel, sensitive_data: Dict[str, str]) -> BaseModel:
+    def _replace_sensitive_data(self, params: BaseModel, sensitive_data: dict[str, str]) -> BaseModel:
 
         """Replaces the sensitive data in the params"""
         # if there are any str with <secret>placeholder</secret> in the params, replace them with the actual value from sensitive_data

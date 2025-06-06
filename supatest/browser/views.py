@@ -2,15 +2,15 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from browser_use.browser.views import (
-    BrowserState,
+    BrowserStateSummary,
     TabInfo,
 )
 from browser_use.dom.views import DOMElementNode
 
 
 @dataclass
-class SupatestBrowserState(BrowserState):
-    """Extended version of BrowserState that uses SupatestDOMElementNode"""
+class SupatestBrowserState(BrowserStateSummary):
+    """Extended version of BrowserStateSummary that uses SupatestDOMElementNode"""
     url: str = ""
     title: str = ""
     scroll_x: int = 0

@@ -26,18 +26,18 @@ from langchain_core.messages import BaseMessage
 
 from browser_use.agent.service import Agent
 from browser_use.exceptions import LLMException
-from browser_use.telemetry.views import AgentEndTelemetryEvent, AgentStepTelemetryEvent
+from browser_use.telemetry.views import AgentTelemetryEvent
 from browser_use.agent.views import AgentStepInfo, StepMetadata
 from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
-from browser_use.browser.views import  BrowserError, BrowserState, BrowserStateHistory
+from browser_use.browser.views import  BrowserError, BrowserStateSummary, BrowserStateHistory
 
 from browser_use.utils import time_execution_async
 from supatest.agent.views import SupatesAgentState, SupatestAgentOutput, SupatestAgentHistory, SupatestAgentHistoryList, SupatestActionResult
 from supatest.controller.registry.views import SupatestActionModel
 
 from supatest.browser.browser import SupatestBrowser
-from supatest.browser.context import SupatestBrowserContext
+from supatest.browser.context import SupatestBrowserSession
 from supatest.browser.views import SupatestBrowserState
 from supatest.controller.service import SupatestController
 from importlib import resources
@@ -51,48 +51,53 @@ AgentHookFunc = Callable[['Agent'], None]
 class SupatestAgent(Agent[Context]):
     """Extended Agent class with custom implementations"""
 
-    browser_context: SupatestBrowserContext
+    browser_session: SupatestBrowserSession
     controller: SupatestController[Context]
 
     def __init__(
         self,
         task: str,
         llm: BaseChatModel,
-        browser: SupatestBrowser | None = None,
-        browser_context: SupatestBrowserContext | None = None,
+        browser_session: SupatestBrowserSession | None = None,
         controller: SupatestController[Context] = SupatestController(),
-        sensitive_data: Optional[Dict[str, str]] = None,
-        initial_actions: Optional[List[Dict[str, Dict[str, Any]]]] = None,
+        sensitive_data: dict[str, str] | dict[str, dict[str, str]] | None = None,
+        initial_actions: list[dict[str, dict[str, Any]]] | None = None,
         register_new_step_callback: Callable[['SupatestBrowserState', 'SupatestAgentOutput', int], Awaitable[None]] | None = None,
         register_done_callback: Callable[['SupatestAgentHistoryList'], Awaitable[None]] | None = None,
         register_external_agent_status_raise_error_callback: Callable[[], Awaitable[bool]] | None = None,
-        send_message: Optional[Callable[[dict], Awaitable[bool]]] = None,
-        goal_step_id: Optional[str] = None,
-        requestId: Optional[str] = None,
-        testCaseId: Optional[str] = None,
-        active_page_id: Optional[str] = None,
-        injected_agent_state: Optional[SupatesAgentState] = None,
+        send_message: Callable[[dict], Awaitable[bool]] | None = None,
+        goal_step_id: str | None = None,
+        requestId: str | None = None,
+        testCaseId: str | None = None,
+        active_page_id: str | None = None,
+        injected_agent_state: SupatesAgentState | None = None,
+        # Memory parameters (now constructor parameters in new browser-use)
+        enable_memory: bool = True,
+        memory_config: Any | None = None,  # MemoryConfig | None but avoiding import issues
         **kwargs
     ):
         # Initialize consecutive_eval_failure first
         self.consecutive_eval_failure = 0
         
+        # Store memory settings
+        self.enable_memory = enable_memory
+        self.memory_config = memory_config
+        
         # Get custom action descriptions from our registry before calling super().__init__
         controller_registry = controller.registry
         available_actions = controller_registry.get_prompt_description()
         
-        # Handle browser and browser_context setup before calling super().__init__
-        self.injected_browser = browser is not None
-        self.injected_browser_context = browser_context is not None
+        # Handle browser session setup before calling super().__init__
+        self.injected_browser_session = browser_session is not None
         
         # Initialize state
         self.state = injected_agent_state or SupatesAgentState()
         
-        # If only browser is provided, create a SupatestBrowserContext
-        if browser and not browser_context:
-            browser_context = SupatestBrowserContext(browser=browser, config=browser.config.new_context_config, active_page_id=active_page_id)
-            # We created the browser_context, so we should close it
-            self.injected_browser_context = False
+        # If no browser session is provided, create one with the active page ID
+        if not browser_session:
+            browser_session = SupatestBrowserSession(active_page_id=active_page_id)
+            # We created the browser_session, so we should close it
+            self.injected_browser_session = False
         
         # Load our custom system prompt if not already overridden
         if 'override_system_message' not in kwargs:
@@ -109,14 +114,15 @@ class SupatestAgent(Agent[Context]):
         super().__init__(
             task=task,
             llm=llm,
-            browser=browser,
-            browser_context=browser_context,
+            browser_session=browser_session,
             controller=controller,
             sensitive_data=sensitive_data,
             initial_actions=initial_actions,
             register_new_step_callback=register_new_step_callback,
             register_done_callback=register_done_callback,
             register_external_agent_status_raise_error_callback=register_external_agent_status_raise_error_callback,
+            enable_memory=enable_memory,
+            memory_config=memory_config,
             **kwargs
         )
         self.send_message = send_message
@@ -284,11 +290,11 @@ class SupatestAgent(Agent[Context]):
         logger.info(f'📍 Step {self.state.n_steps} | Subgoal ID: {subgoal_id}')
 
         try:
-            state = await self.browser_context.get_state(cache_clickable_elements_hashes=True)
-            active_page = await self.browser_context.get_current_page()
+            state = await self.browser_session.get_state_summary(cache_clickable_elements_hashes=True)
+            active_page = await self.browser_session.get_current_page()
             
             # generate procedural memory if needed
-            if self.settings.enable_memory and self.memory and self.state.n_steps % self.settings.memory_interval == 0:
+            if self.enable_memory and self.memory and self.state.n_steps % self.memory.config.memory_interval == 0:
                 self.memory.create_procedural_memory(self.state.n_steps)
             
             await self._raise_if_stopped_or_paused()
@@ -435,15 +441,10 @@ class SupatestAgent(Agent[Context]):
         finally:
             step_end_time = time.time()
             actions = [a.model_dump(exclude_unset=True) for a in model_output.action] if model_output else []
-            self.telemetry.capture(
-                AgentStepTelemetryEvent(
-                    agent_id=self.state.agent_id,
-                    step=self.state.n_steps,
-                    actions=actions,
-                    consecutive_failures=self.state.consecutive_failures,
-                    step_error=[r.error for r in result if r.error] if result else ['No result'],
-                )
-            )
+            
+            # Note: The new AgentTelemetryEvent is designed for end-of-agent events, not step events.
+            # For now, we'll skip step-level telemetry since it doesn't align with the new structure.
+            # The upstream browser-use appears to have moved away from step-level telemetry.
 
             if not result:
                 return
@@ -461,7 +462,7 @@ class SupatestAgent(Agent[Context]):
     def _make_history_item(
         self,
         model_output: SupatestAgentOutput | None,
-        state: BrowserState,
+        state: BrowserStateSummary,
         result: list[SupatestActionResult],
         metadata: Optional[StepMetadata] = None,
     ) -> None:
@@ -616,18 +617,77 @@ class SupatestAgent(Agent[Context]):
             # Unregister signal handlers before cleanup
             signal_handler.unregister()
             
-            self.telemetry.capture(
-				AgentEndTelemetryEvent(
-					agent_id=self.state.agent_id,
-					is_done=self.state.history.is_done(),
-					success=self.state.history.is_successful(),
-					steps=self.state.n_steps,
-					max_steps_reached=self.state.n_steps >= max_steps,
-					errors=self.state.history.errors(),
-					total_input_tokens=self.state.history.total_input_tokens(),
-					total_duration_seconds=self.state.history.total_duration_seconds(),
-				)
-			)
+            # Gather telemetry data for the final agent event
+            try:
+                # Extract action history and errors from the agent's history
+                action_history = []
+                action_errors = []
+                urls_visited = []
+                
+                for history_item in self.state.history.history:
+                    if history_item.model_output and history_item.model_output.action:
+                        actions = [action.model_dump(exclude_unset=True) for action in history_item.model_output.action]
+                        action_history.append(actions)
+                    else:
+                        action_history.append(None)
+                    
+                    # Collect errors from results
+                    if history_item.result:
+                        errors = [res.error for res in history_item.result if res.error]
+                        action_errors.append(errors[0] if errors else None)
+                    else:
+                        action_errors.append(None)
+                    
+                    # Collect URLs
+                    if history_item.state and history_item.state.url:
+                        urls_visited.append(history_item.state.url)
+                
+                # Get model information
+                model_name = getattr(self.llm, 'model_name', 'unknown')
+                model_provider = type(self.llm).__name__
+                
+                # Determine final result
+                final_result = None
+                if self.state.history.history and self.state.history.is_done():
+                    last_result = self.state.history.history[-1].result
+                    if last_result and last_result[-1].extracted_content:
+                        final_result = last_result[-1].extracted_content
+                
+                # Determine error message
+                error_message = None
+                if not self.state.history.is_successful():
+                    errors = self.state.history.errors()
+                    if errors:
+                        error_message = errors[0]
+                
+                self.telemetry.capture(
+                    AgentTelemetryEvent(
+                        # Start details
+                        task=self.task,
+                        model=model_name,
+                        model_provider=model_provider,
+                        planner_llm=getattr(self.settings.planner_llm, 'model_name', None) if self.settings.planner_llm else None,
+                        max_steps=max_steps,
+                        max_actions_per_step=self.settings.max_actions_per_step,
+                        use_vision=self.settings.use_vision,
+                        use_validation=self.settings.validate_output,
+                        version=self._get_version(),
+                        source='supatest',
+                        # Step details
+                        action_errors=action_errors,
+                        action_history=action_history,
+                        urls_visited=urls_visited,
+                        # End details
+                        steps=self.state.n_steps,
+                        total_input_tokens=self.state.history.total_input_tokens(),
+                        total_duration_seconds=self.state.history.total_duration_seconds(),
+                        success=self.state.history.is_successful(),
+                        final_result_response=final_result,
+                        error_message=error_message,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Failed to capture telemetry: {str(e)}")
             
             await self._cleanup(max_steps)
             
@@ -641,8 +701,8 @@ class SupatestAgent(Agent[Context]):
     async def _cleanup(self, max_steps: int) -> None:
         """Cleanup resources and generate final artifacts"""
         logger.debug('🔄 Cleaning up...')
-        # Remove highlights before closing the browser context
-        await self.browser_context.remove_highlights()
+        # Remove highlights before closing the browser session
+        await self.browser_session.remove_highlights()
 
     async def stop(self) -> None:
         """Stop the agent"""
@@ -672,7 +732,10 @@ class SupatestAgent(Agent[Context]):
         self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'], page=page)
         self.DoneAgentOutput = SupatestAgentOutput.type_with_custom_actions(self.DoneActionModel)
 
-    
+    def _get_version(self) -> str:
+        """Get the supatest version for telemetry"""
+        from supatest import __version__
+        return __version__
 
     # @observe(name='controller.multi_act')
     @time_execution_async('--multi-act (agent)')
@@ -685,10 +748,10 @@ class SupatestAgent(Agent[Context]):
         """Execute multiple actions with SupatestActionModel type"""
         results = []
 
-        cached_selector_map = await self.browser_context.get_selector_map()
+        cached_selector_map = await self.browser_session.get_selector_map()
         cached_path_hashes = set(e.hash.branch_path_hash for e in cached_selector_map.values())
 
-        await self.browser_context.remove_highlights()
+        await self.browser_session.remove_highlights()
 
         # Create initial steps array
         steps = []
@@ -699,7 +762,7 @@ class SupatestAgent(Agent[Context]):
         for i, action in enumerate(actions):
             isExecuted = 'pending'
             if action.get_index() is not None and i != 0:
-                new_state = await self.browser_context.get_state(cache_clickable_elements_hashes=False)
+                new_state = await self.browser_session.get_state_summary(cache_clickable_elements_hashes=False)
                 
                 new_selector_map = new_state.selector_map
                 # Detect index change after previous action
@@ -738,17 +801,17 @@ class SupatestAgent(Agent[Context]):
             locator: str | None = None
             all_unique_locators: list[dict] | None = None
             if action_index is not None:
-                if action_index not in await self.browser_context.get_selector_map():
+                if action_index not in await self.browser_session.get_selector_map():
                     message = f'Element index {action_index} does not exist - retry or use alternative actions'
                     SupatestActionResult(error=message, isExecuted='failure')
                     raise Exception(message)
                 
-                element_node = await self.browser_context.get_dom_element_by_index(action_index)
+                element_node = await self.browser_session.get_dom_element_by_index(action_index)
                 if element_node is None:
                     raise Exception(f'Element index {action_index} does not exist - retry or use alternative actions')
                 logger.debug(f'Element node: {element_node}')
             
-                element_handle = await self.browser_context.get_locate_element(element_node)
+                element_handle = await self.browser_session.get_locate_element(element_node)
                 if element_handle is None:
                     raise BrowserError(f'Element: {repr(element_node)} not found')
                 
@@ -760,7 +823,7 @@ class SupatestAgent(Agent[Context]):
 
             result = await self.controller.act(
                 action,
-                self.browser_context,
+                self.browser_session,
                 self.settings.page_extraction_llm,
                 self.sensitive_data,
                 self.settings.available_file_paths,
@@ -795,7 +858,7 @@ class SupatestAgent(Agent[Context]):
             if results[-1].is_done or results[-1].error or i == len(actions) - 1:
                 break
 
-            await asyncio.sleep(self.browser_context.config.wait_between_actions)
+            await asyncio.sleep(self.browser_session.config.wait_between_actions)
             # hash all elements. if it is a subset of cached_state its fine - else break (new elements on page)
 
         return results

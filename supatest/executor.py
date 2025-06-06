@@ -10,7 +10,7 @@ from browser_use.browser.browser import BrowserConfig
 
 from supatest.agent.service import SupatestAgent
 from supatest.controller.service import SupatestController
-from supatest.browser.browser import SupatestBrowser
+from supatest.browser.context import SupatestBrowserSession
 
 logger = logging.getLogger("py_ws_server")
 
@@ -178,12 +178,11 @@ class Executor:
                     )
                     await self.stop_agent()
 
-            # Prepare the browser
-            browser = SupatestBrowser(
-                config=BrowserConfig(
-                    headless=False,
-                    cdp_url=connection_url,
-                )
+            # Prepare the browser session directly
+            browser_session = SupatestBrowserSession(
+                cdp_url=connection_url,
+                headless=False,
+                active_page_id=active_page_id,
             )
 
             controller = SupatestController(exclude_actions=['search_google', 'extract_content', 'scroll_to_text'])
@@ -205,7 +204,7 @@ class Executor:
             self.agent = SupatestAgent(
                 task=task,
                 llm=model,
-                browser=browser,
+                browser_session=browser_session,
                 controller=controller,
                 send_message=send_message,
                 goal_step_id=goal_id,

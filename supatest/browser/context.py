@@ -2,56 +2,71 @@ import logging
 from typing import Optional
 from importlib import resources
 
-from browser_use.browser.browser import Browser
-from browser_use.browser.context import BrowserContext
-from browser_use.browser.context import BrowserContextConfig, BrowserContextState, BrowserSession
+from browser_use.browser import BrowserSession, BrowserProfile
 
 logger = logging.getLogger(__name__)
 
 
-class SupatestBrowserContext(BrowserContext):
-    """Extended version of BrowserContext that uses SupatestDOMElementNode"""
+class SupatestBrowserSession(BrowserSession):
+    """Extended version of BrowserSession that uses Supatest extensions"""
 
     def __init__(
         self,
-        browser: 'Browser',
-        config: BrowserContextConfig = BrowserContextConfig(),
-        state: Optional[BrowserContextState] = None,
-        active_page_id: Optional[str] = None
+        browser_profile: BrowserProfile | None = None,
+        active_page_id: str | None = None,
+        **kwargs
     ):
-        super().__init__(browser, config, state)
+        # Use the provided browser_profile or create a default one
+        if browser_profile is None:
+            browser_profile = BrowserProfile()
+        
+        super().__init__(browser_profile=browser_profile, **kwargs)
         self.active_page_id = active_page_id
         self.locator_js_code = resources.files('supatest.agent').joinpath('locator.js').read_text()
 
-    async def _initialize_session(self):
-        """Initialize the browser session with Supatest extensions"""
-        logger.debug('Initializing browser context')
+    async def start(self):
+        """Start the browser session with Supatest extensions"""
+        # Call the parent start method first
+        result = await super().start()
+        
+        # Inject our custom JavaScript into all existing pages
+        if self.browser_context and self.browser_context.pages:
+            for page in self.browser_context.pages:
+                try:
+                    await page.evaluate(self.locator_js_code)
+                except Exception as e:
+                    logger.debug(f"Failed to inject locator JS into page {page.url}: {e}")
+        
+        # Handle active page ID if provided
+        if self.active_page_id and self.browser_context:
+            await self._handle_active_page_selection()
+        
+        return result
 
-        playwright_browser = await self.browser.get_playwright_browser()
-        context = await self._create_context(playwright_browser)
-        self._page_event_handler = None
-
-        # Get or create a page to use
-        pages = context.pages
+    async def _handle_active_page_selection(self):
+        """Handle active page selection based on active_page_id"""
+        if not self.active_page_id or not self.browser_context:
+            return
+        
         logger.info(f'active_page_id received: {self.active_page_id}')
-        logger.info(f'available pages: {pages}')
+        pages = self.browser_context.pages
+        logger.info(f'available pages: {len(pages)}')
         
-        for page in pages:
-            await page.evaluate(self.locator_js_code)
+        # Default to first page
+        target_page_index = 0
         
-        # making the tabId 0 as default 
-        tabId = 0
-        page_info = {}
-        if self.browser.config.cdp_url:
-            cdp_session = await pages[0].context.new_cdp_session(pages[0])
-            result = await cdp_session.send('Target.getTargets')
-            await cdp_session.detach()
-            targets = result.get('targetInfos', [])
+        # If we have CDP access, try to match the active page ID
+        if self.cdp_url and pages:
+            try:
+                cdp_session = await pages[0].context.new_cdp_session(pages[0])
+                result = await cdp_session.send('Target.getTargets')
+                await cdp_session.detach()
+                targets = result.get('targetInfos', [])
 
-            # If active_page_id is provided, only process that specific page
-            if self.active_page_id is not None:
+                # Find the target matching our active_page_id
                 for target in targets:
                     if target['targetId'] == self.active_page_id:
+                        # Find the corresponding page
                         for page_id, page in enumerate(pages):
                             if page.url == target['url']:
                                 try:
@@ -62,52 +77,38 @@ class SupatestBrowserContext(BrowserContext):
                                         "URL": page.url,
                                         "Title": title
                                     }
-                                    print(f'Active Page Details: {active_page_details}')
-                                    tabId = page_id
+                                    logger.info(f'Active Page Details: {active_page_details}')
+                                    target_page_index = page_id
+                                    break
                                 except Exception as e:
-                                    print(f'Error retrieving active page info: {e}')
+                                    logger.debug(f'Error retrieving active page info: {e}')
                                 break
                         break
+            except Exception as e:
+                logger.debug(f"Failed to get CDP targets: {e}")
+        
+        # Set the agent current page to the target page
+        if 0 <= target_page_index < len(pages):
+            self.agent_current_page = pages[target_page_index]
+            try:
+                await self.agent_current_page.bring_to_front()
+                await self.agent_current_page.wait_for_load_state('load')
+            except Exception as e:
+                logger.debug(f"Failed to bring page to front: {e}")
 
-        self.session = BrowserSession(
-            context=context,
-            cached_state=None,
-        )
-
-        active_page = None
-        if self.browser.config.cdp_url:
-            # If we have a saved target ID, try to find and activate it
-            if self.state.target_id:
-                targets = await self._get_cdp_targets()
-                for target in targets:
-                    if target['targetId'] == self.state.target_id:
-                        # Find matching page by URL
-                        for page in pages:
-                            if page.url == target['url']:
-                                active_page = page
-                                break
-                        break
+    async def create_new_tab(self, url: str | None = None) -> 'Page':
+        """Override to inject locator JS into new tabs"""
+        page = await super().create_new_tab(url)
+        
+        # Inject our custom JavaScript
+        try:
+            await page.evaluate(self.locator_js_code)
+        except Exception as e:
+            logger.debug(f"Failed to inject locator JS into new tab: {e}")
+        
+        return page
 
 
-        if not active_page:
-            if pages:
-                active_page = pages[tabId]
-                logger.debug('Using existing page')
-            else:
-                active_page = await context.new_page()
-                logger.debug('Created new page')
-
-            # Get target ID for the active page
-            if self.browser.config.cdp_url:
-                targets = await self._get_cdp_targets()
-                for target in targets:
-                    if target['url'] == active_page.url:
-                        self.state.target_id = target['targetId']
-                        break
-
-        # Bring page to front
-        await active_page.bring_to_front()
-        await active_page.wait_for_load_state('load')
-
-        return self.session
+# Backward compatibility alias
+SupatestBrowserContext = SupatestBrowserSession
 

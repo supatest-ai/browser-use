@@ -1,26 +1,25 @@
-from browser_use.browser.browser import Browser
-from browser_use.browser.context import BrowserContextConfig, BrowserContextState
+from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
+from browser_use.browser.views import BrowserStateSummary
 
-from supatest.browser.context import SupatestBrowserContext
+from supatest.browser.context import SupatestBrowserSession
 
 
 class SupatestBrowser(Browser):
-    """Extended version of Browser that uses SupatestBrowserContext"""
+    """Extended version of Browser that uses SupatestBrowserSession"""
 
     async def new_context(
         self,
-        config: BrowserContextConfig = BrowserContextConfig(),
-    ) -> SupatestBrowserContext:
-        """Override new_context to return SupatestBrowserContext instead of BrowserContext"""
-        browser_config = self.config.model_dump() if self.config else {}
-        context_config = config.model_dump() if config else {}
-        merged_config = {**browser_config, **context_config}
-        return SupatestBrowserContext(config=BrowserContextConfig(**merged_config), browser=self)
+        **context_kwargs,
+    ) -> SupatestBrowserSession:
+        """Override new_context to return SupatestBrowserSession instead of BrowserContext"""
+        merged_config = {**self.config.browser_context_config.model_dump(), **context_kwargs}
+        
+        return SupatestBrowserSession(config=BrowserContextConfig(**merged_config), browser=self)
 
     async def create_context(
-        self,
-        config: BrowserContextConfig = BrowserContextConfig(),
-        state: BrowserContextState | None = None,
-    ) -> SupatestBrowserContext:
-        """Override create_context to return SupatestBrowserContext instead of BrowserContext"""
-        return SupatestBrowserContext(self, config, state) 
+        self, 
+        state: BrowserStateSummary | None = None, 
+        config: BrowserConfig | None = None,
+    ) -> SupatestBrowserSession:
+        """Override create_context to return SupatestBrowserSession instead of BrowserContext"""
+        return SupatestBrowserSession(self, config, state) 
