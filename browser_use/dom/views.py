@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from functools import cached_property
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from browser_use.dom.history_tree_processor.view import CoordinateSet, HashedDomElement, ViewportInfo
 from browser_use.utils import time_execution_sync
@@ -61,23 +61,23 @@ class DOMElementNode(DOMBaseNode):
 
 	tag_name: str
 	xpath: str
-	attributes: Dict[str, str]
-	children: List[DOMBaseNode]
+	attributes: dict[str, str]
+	children: list[DOMBaseNode]
 	is_interactive: bool = False
 	is_top_element: bool = False
 	is_in_viewport: bool = False
 	shadow_root: bool = False
-	highlight_index: Optional[int] = None
-	viewport_coordinates: Optional[CoordinateSet] = None
-	page_coordinates: Optional[CoordinateSet] = None
-	viewport_info: Optional[ViewportInfo] = None
+	highlight_index: int | None = None
+	viewport_coordinates: CoordinateSet | None = None
+	page_coordinates: CoordinateSet | None = None
+	viewport_info: ViewportInfo | None = None
 
 	"""
 	### State injected by the browser context.
 
 	The idea is that the clickable elements are sometimes persistent from the previous page -> tells the model which objects are new/_how_ the state has changed
 	"""
-	is_new: Optional[bool] = None
+	is_new: bool | None = None
 
 	def __json__(self) -> dict:
 		return {
@@ -232,28 +232,6 @@ class DOMElementNode(DOMBaseNode):
 
 		process_node(self, 0)
 		return '\n'.join(formatted_text)
-
-	def get_file_upload_element(self, check_siblings: bool = True) -> Optional['DOMElementNode']:
-		# Check if current element is a file input
-		if self.tag_name == 'input' and self.attributes.get('type') == 'file':
-			return self
-
-		# Check children
-		for child in self.children:
-			if isinstance(child, DOMElementNode):
-				result = child.get_file_upload_element(check_siblings=False)
-				if result:
-					return result
-
-		# Check siblings only for the initial call
-		if check_siblings and self.parent:
-			for sibling in self.parent.children:
-				if sibling is not self and isinstance(sibling, DOMElementNode):
-					result = sibling.get_file_upload_element(check_siblings=False)
-					if result:
-						return result
-
-		return None
 
 
 SelectorMap = dict[int, DOMElementNode]

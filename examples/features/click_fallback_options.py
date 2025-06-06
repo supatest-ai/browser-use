@@ -2,15 +2,16 @@ import asyncio
 import os
 import sys
 
-from aiohttp import web  # make sure to install aiohttp: pip install aiohttp
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from dotenv import load_dotenv
+
+load_dotenv()
+
+from aiohttp import web  # make sure to install aiohttp: pip install aiohttp
 from langchain_openai import ChatOpenAI
 
 # from langchain_google_genai import ChatGoogleGenerativeAI
-
-
-# Adjust path if necessary
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from browser_use import Agent, Controller
 
 # Define a simple HTML page
@@ -163,12 +164,10 @@ async def run_http_server():
 	await site.start()
 	print('HTTP server running on http://localhost:8000')
 	# Keep the server running indefinitely.
-	while True:
-		await asyncio.sleep(3600)
+	await asyncio.Event().wait()
 
 
 # Your agent tasks and other logic
-load_dotenv()
 controller = Controller()
 
 

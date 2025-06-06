@@ -5,21 +5,17 @@ import os
 import sys
 
 # Adjust Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dotenv import load_dotenv
+
+load_dotenv()
+
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from pydantic import SecretStr
 
 from browser_use.agent.service import Agent
-from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
-from browser_use.browser.context import BrowserContextWindowSize
-
-from supatest import SupatestAgent
-from supatest import SupatestBrowser
-from supatest import SupatestBrowserContext
-# Load environment variables
-load_dotenv()
+from browser_use.browser import BrowserProfile, BrowserSession
 
 # Set LLM based on defined environment variables
 if os.getenv('OPENAI_API_KEY'):
@@ -37,18 +33,14 @@ else:
 	raise ValueError('No LLM found. Please set OPENAI_API_KEY or AZURE_OPENAI_KEY and AZURE_OPENAI_ENDPOINT.')
 
 
-browser = SupatestBrowser(
-	config=BrowserConfig(
+browser_session = BrowserSession(
+	browser_profile=BrowserProfile(
 		headless=False,  # This is True in production
-		disable_security=True,
-		new_context_config=BrowserContextConfig(
-			disable_security=True,
-			minimum_wait_page_load_time=1,  # 3 on prod
-			maximum_wait_page_load_time=10,  # 20 on prod
-			# no_viewport=True,
-			browser_window_size=BrowserContextWindowSize(width=1280, height=1100),
-			# trace_path='./tmp/web_voyager_agent',
-		),
+		minimum_wait_page_load_time=1,  # 3 on prod
+		maximum_wait_page_load_time=10,  # 20 on prod
+		viewport={'width': 1280, 'height': 1100},
+		user_data_dir='~/.config/browseruse/profiles/default',
+		# trace_path='./tmp/web_voyager_agent',
 	)
 )
 
@@ -78,11 +70,12 @@ TASK = """
 Go to https://coffee-cart.app/ and click on Expresso and Cappuccino and add them to the cart. Then do nothing.
 """
 
+
 async def main():
 	agent = SupatestAgent(
 		task=TASK,
 		llm=llm,
-		browser=browser,
+		browser_session=browser_session,
 		validate_output=True,
 		enable_memory=False,
 	)

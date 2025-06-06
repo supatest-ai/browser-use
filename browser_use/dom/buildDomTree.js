@@ -51,6 +51,8 @@
       boundingRectHitRate: 0,
       computedStyleHitRate: 0,
       overallHitRate: 0,
+      clientRectsCacheHits: 0,
+      clientRectsCacheMisses: 0,
     },
     nodeMetrics: {
       totalNodes: 0,
@@ -102,9 +104,11 @@
   // Add caching mechanisms at the top level
   const DOM_CACHE = {
     boundingRects: new WeakMap(),
+    clientRects: new WeakMap(),
     computedStyles: new WeakMap(),
     clearCache: () => {
       DOM_CACHE.boundingRects = new WeakMap();
+      DOM_CACHE.clientRects = new WeakMap();
       DOM_CACHE.computedStyles = new WeakMap();
     }
   };
@@ -176,6 +180,29 @@
     return style;
   }
 
+  // Add a new function to get cached client rects
+  function getCachedClientRects(element) {
+    if (!element) return null;
+    
+    if (DOM_CACHE.clientRects.has(element)) {
+      if (debugMode && PERF_METRICS) {
+        PERF_METRICS.cacheMetrics.clientRectsCacheHits++;
+      }
+      return DOM_CACHE.clientRects.get(element);
+    }
+    
+    if (debugMode && PERF_METRICS) {
+      PERF_METRICS.cacheMetrics.clientRectsCacheMisses++;
+    }
+    
+    const rects = element.getClientRects();
+    
+    if (rects) {
+      DOM_CACHE.clientRects.set(element, rects);
+    }
+    return rects;
+  }
+
   /**
    * Hash map of DOM nodes indexed by their highlight index.
    *
@@ -187,17 +214,33 @@
 
   const HIGHLIGHT_CONTAINER_ID = "playwright-highlight-container";
 
+  // Add a WeakMap cache for XPath strings
+  const xpathCache = new WeakMap();
+
+  // Initialize once and reuse
+  const viewportObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(entry => {
+        elementVisibilityMap.set(entry.target, entry.isIntersecting);
+      });
+    },
+    { rootMargin: `${viewportExpansion}px` }
+  );
+
   /**
    * Highlights an element in the DOM and returns the index of the next element.
    */
   function highlightElement(element, index, parentIframe = null) {
+    pushTiming('highlighting');
+    
     if (!element) return index;
 
     // Store overlays and the single label for updating
     const overlays = [];
     let label = null;
-    let labelWidth = 20; // Approximate label width
-    let labelHeight = 16; // Approximate label height
+    let labelWidth = 20;
+    let labelHeight = 16;
+    let cleanupFn = null;
 
     try {
       // Create or get highlight container
@@ -211,7 +254,8 @@
         container.style.left = "0";
         container.style.width = "100%";
         container.style.height = "100%";
-        container.style.zIndex = "2147483647";
+        container.style.zIndex = "2147483640";
+        container.style.backgroundColor = 'transparent';
         document.body.appendChild(container);
       }
 
@@ -247,6 +291,9 @@
         iframeOffset.y = iframeRect.top;
       }
 
+      // Create fragment to hold overlay elements
+      const fragment = document.createDocumentFragment();
+
       // Create highlight overlays for each client rect
       for (const rect of rects) {
         if (rect.width === 0 || rect.height === 0) continue; // Skip empty rects
@@ -266,7 +313,7 @@
         overlay.style.width = `${rect.width}px`;
         overlay.style.height = `${rect.height}px`;
 
-        container.appendChild(overlay);
+        fragment.appendChild(overlay);
         overlays.push({ element: overlay, initialRect: rect }); // Store overlay and its rect
       }
 
@@ -306,7 +353,7 @@
       label.style.top = `${labelTop}px`;
       label.style.left = `${labelLeft}px`;
 
-      container.appendChild(label);
+      fragment.appendChild(label);
 
       // Update positions on scroll/resize
       const updatePositions = () => {
@@ -372,21 +419,79 @@
         }
       };
 
-      window.addEventListener('scroll', updatePositions, true); // Use capture phase
-      window.addEventListener('resize', updatePositions);
+      const throttleFunction = (func, delay) => {
+        let lastCall = 0;
+        return (...args) => {
+          const now = performance.now();
+          if (now - lastCall < delay) return;
+          lastCall = now;
+          return func(...args);
+        };
+      };
 
-      // TODO: Add cleanup logic to remove listeners and elements when done.
-
+      const throttledUpdatePositions = throttleFunction(updatePositions, 16); // ~60fps
+      window.addEventListener('scroll', throttledUpdatePositions, true);
+      window.addEventListener('resize', throttledUpdatePositions);
+      
+      // Add cleanup function
+      cleanupFn = () => {
+        window.removeEventListener('scroll', throttledUpdatePositions, true);
+        window.removeEventListener('resize', throttledUpdatePositions);
+        // Remove overlay elements if needed
+        overlays.forEach(overlay => overlay.element.remove());
+        if (label) label.remove();
+      };
+      
+      // Then add fragment to container in one operation
+      container.appendChild(fragment);
+      
       return index + 1;
     } finally {
-      // popTiming('highlighting'); // Assuming this was a typo and should be removed or corrected
+      popTiming('highlighting');
+      // Store cleanup function for later use
+      if (cleanupFn) {
+        // Keep a reference to cleanup functions in a global array
+        (window._highlightCleanupFunctions = window._highlightCleanupFunctions || []).push(cleanupFn);
+      }
     }
+  }
+
+  // Add this function to perform cleanup when needed
+  function cleanupHighlights() {
+    if (window._highlightCleanupFunctions && window._highlightCleanupFunctions.length) {
+      window._highlightCleanupFunctions.forEach(fn => fn());
+      window._highlightCleanupFunctions = [];
+    }
+    
+    // Also remove the container
+    const container = document.getElementById(HIGHLIGHT_CONTAINER_ID);
+    if (container) container.remove();
+  }
+
+  function getElementPosition(currentElement) {
+    if (!currentElement.parentElement) {
+      return 0; // No parent means no siblings
+    }
+  
+    const tagName = currentElement.nodeName.toLowerCase();
+  
+    const siblings = Array.from(currentElement.parentElement.children)
+      .filter((sib) => sib.nodeName.toLowerCase() === tagName);
+  
+    if (siblings.length === 1) {
+      return 0; // Only element of its type
+    }
+  
+    const index = siblings.indexOf(currentElement) + 1; // 1-based index
+    return index;
   }
 
   /**
    * Returns an XPath tree string for an element.
    */
   function getXPathTree(element, stopAtBoundary = true) {
+    if (xpathCache.has(element)) return xpathCache.get(element);
+    
     const segments = [];
     let currentElement = element;
 
@@ -400,26 +505,17 @@
         break;
       }
 
-      let index = 0;
-      let sibling = currentElement.previousSibling;
-      while (sibling) {
-        if (
-          sibling.nodeType === Node.ELEMENT_NODE &&
-          sibling.nodeName === currentElement.nodeName
-        ) {
-          index++;
-        }
-        sibling = sibling.previousSibling;
-      }
-
+      const position = getElementPosition(currentElement);
       const tagName = currentElement.nodeName.toLowerCase();
-      const xpathIndex = index > 0 ? `[${index + 1}]` : "";
+      const xpathIndex = position > 0 ? `[${position}]` : "";
       segments.unshift(`${tagName}${xpathIndex}`);
 
       currentElement = currentElement.parentNode;
     }
 
-    return segments.join("/");
+    const result = segments.join("/");
+    xpathCache.set(element, result);
+    return result;
   }
 
   /**
@@ -427,6 +523,26 @@
    */
   function isTextNodeVisible(textNode) {
     try {
+      // Special case: when viewportExpansion is -1, consider all text nodes as visible
+      if (viewportExpansion === -1) {
+        // Still check parent visibility for basic filtering
+        const parentElement = textNode.parentElement;
+        if (!parentElement) return false;
+
+        try {
+          return parentElement.checkVisibility({
+            checkOpacity: true,
+            checkVisibilityCSS: true,
+          });
+        } catch (e) {
+          // Fallback if checkVisibility is not supported
+          const style = window.getComputedStyle(parentElement);
+          return style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            style.opacity !== '0';
+        }
+      }
+      
       const range = document.createRange();
       range.selectNodeContents(textNode);
       const rects = range.getClientRects(); // Use getClientRects for Range
@@ -449,7 +565,7 @@
             rect.top > window.innerHeight + viewportExpansion ||
             rect.right < -viewportExpansion ||
             rect.left > window.innerWidth + viewportExpansion
-          ) || viewportExpansion === -1) {
+          )) {
             isAnyRectInViewport = true;
             break; // Found a visible rect in viewport, no need to check others
           }
@@ -465,15 +581,14 @@
       if (!parentElement) return false;
 
       try {
-        return isInViewport && parentElement.checkVisibility({
+        return parentElement.checkVisibility({
           checkOpacity: true,
           checkVisibilityCSS: true,
         });
       } catch (e) {
         // Fallback if checkVisibility is not supported
         const style = window.getComputedStyle(parentElement);
-        return isInViewport &&
-          style.display !== 'none' &&
+        return style.display !== 'none' &&
           style.visibility !== 'hidden' &&
           style.opacity !== '0';
       }
@@ -533,6 +648,10 @@
       return false;
     }
 
+    // Cache the tagName and style lookups
+    const tagName = element.tagName.toLowerCase();
+    const style = getCachedComputedStyle(element);
+
     // Define interactive cursors
     const interactiveCursors = new Set([
       'pointer',    // Link/clickable elements
@@ -582,7 +701,6 @@
 
     function doesElementHaveInteractivePointer(element) {
       if (element.tagName.toLowerCase() === "html") return false;
-      const style = getCachedComputedStyle(element);
 
       if (interactiveCursors.has(style.cursor)) return true;
 
@@ -626,9 +744,7 @@
     ]);
 
     // handle inputs, select, checkbox, radio, textarea, button and make sure they are not cursor style disabled/not-allowed
-    if (interactiveElements.has(element.tagName.toLowerCase())) {
-      const style = getCachedComputedStyle(element);
-
+    if (interactiveElements.has(tagName)) {
       // Check for non-interactive cursor
       if (nonInteractiveCursors.has(style.cursor)) {
         return false;
@@ -661,10 +777,14 @@
       return true;
     }
 
-    const tagName = element.tagName.toLowerCase();
     const role = element.getAttribute("role");
     const ariaRole = element.getAttribute("aria-role");
 
+    // Check for contenteditable attribute
+    if (element.getAttribute("contenteditable") === "true" || element.isContentEditable) {
+      return true;
+    }
+    
     // Added enhancement to capture dropdown interactive elements
     if (element.classList && (
       element.classList.contains("button") ||
@@ -704,7 +824,7 @@
 
     if (hasInteractiveRole) return true;
 
-    // check whether element has event listeners
+    // check whether element has event listeners by window.getEventListeners
     try {
       if (typeof getEventListeners === 'function') {
         const listeners = getEventListeners(element);
@@ -714,13 +834,27 @@
             return true; // Found a mouse interaction listener
           }
         }
-      } else {
-        // Fallback: Check common event attributes if getEventListeners is not available
-        const commonMouseAttrs = ['onclick', 'onmousedown', 'onmouseup', 'ondblclick'];
-        if (commonMouseAttrs.some(attr => element.hasAttribute(attr))) {
-          return true;
-        }
       }
+
+      const getEventListenersForNode = window.getEventListenersForNode;
+      if (typeof getEventListenersForNode === 'function') {
+        const listeners = getEventListenersForNode(element);
+          const interactionEvents = ['click', 'mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change', 'input', 'focus', 'blur'];
+          for (const eventType of interactionEvents) {
+            for (const listener of listeners) {
+              if (listener.type === eventType) {
+                 return true; // Found a common interaction listener
+              }
+            }
+          }
+      }
+      // Fallback: Check common event attributes if getEventListeners is not available (getEventListeners doesn't work in page.evaluate context)
+        const commonMouseAttrs = ['onclick', 'onmousedown', 'onmouseup', 'ondblclick'];
+        for (const attr of commonMouseAttrs) {
+          if (element.hasAttribute(attr) || typeof element[attr] === 'function') {
+            return true;
+          }
+        }
     } catch (e) {
       // console.warn(`Could not check event listeners for ${element.tagName}:`, e);
       // If checking listeners fails, rely on other checks
@@ -734,7 +868,12 @@
    * Checks if an element is the topmost element at its position.
    */
   function isTopElement(element) {
-    const rects = element.getClientRects(); // Use getClientRects
+    // Special case: when viewportExpansion is -1, consider all elements as "top" elements
+    if (viewportExpansion === -1) {
+      return true;
+    }
+    
+    const rects = getCachedClientRects(element); // Replace element.getClientRects()
 
     if (!rects || rects.length === 0) {
       return false; // No geometry, cannot be top
@@ -748,7 +887,7 @@
         rect.top > window.innerHeight + viewportExpansion ||
         rect.right < -viewportExpansion ||
         rect.left > window.innerWidth + viewportExpansion
-      ) || viewportExpansion === -1) {
+      )) {
         isAnyRectInViewport = true;
         break;
       }
@@ -814,8 +953,6 @@
    * Checks if an element is within the expanded viewport.
    */
   function isInExpandedViewport(element, viewportExpansion) {
-    return true
-
     if (viewportExpansion === -1) {
       return true;
     }
@@ -836,7 +973,6 @@
         boundingRect.left > window.innerWidth + viewportExpansion
       );
     }
-
 
     // Check if *any* client rect is within the viewport
     for (const rect of rects) {
@@ -885,7 +1021,7 @@
 
     // Fast-path for common interactive elements
     const interactiveElements = new Set([
-      "a", "button", "input", "select", "textarea", "details", "summary"
+      "a", "button", "input", "select", "textarea", "details", "summary", "label"
     ]);
 
     if (interactiveElements.has(tagName)) return true;
@@ -896,7 +1032,7 @@
       element.hasAttribute("tabindex") ||
       element.hasAttribute("aria-") ||
       element.hasAttribute("data-action") ||
-      element.getAttribute("contenteditable") == "true";
+      element.getAttribute("contenteditable") === "true";
 
     return hasQuickInteractiveAttr;
   }
@@ -912,6 +1048,48 @@
   ]);
 
   /**
+   * Heuristically determines if an element should be considered as independently interactive,
+   * even if it's nested inside another interactive container.
+   *
+   * This function helps detect deeply nested actionable elements (e.g., menu items within a button)
+   * that may not be picked up by strict interactivity checks.
+   */
+  function isHeuristicallyInteractive(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+
+    // Skip non-visible elements early for performance
+    if (!isElementVisible(element)) return false;
+
+    // Check for common attributes that often indicate interactivity
+    const hasInteractiveAttributes =
+      element.hasAttribute('role') ||
+      element.hasAttribute('tabindex') ||
+      element.hasAttribute('onclick') ||
+      typeof element.onclick === 'function';
+
+    // Check for semantic class names suggesting interactivity
+    const hasInteractiveClass = /\b(btn|clickable|menu|item|entry|link)\b/i.test(element.className || '');
+
+    // Determine whether the element is inside a known interactive container
+    const isInKnownContainer = Boolean(
+      element.closest('button,a,[role="button"],.menu,.dropdown,.list,.toolbar')
+    );
+
+    // Ensure the element has at least one visible child (to avoid marking empty wrappers)
+    const hasVisibleChildren = [...element.children].some(isElementVisible);
+
+    // Avoid highlighting elements whose parent is <body> (top-level wrappers)
+    const isParentBody = element.parentElement && element.parentElement.isSameNode(document.body);
+
+    return (
+      (isInteractiveElement(element) || hasInteractiveAttributes || hasInteractiveClass) &&
+      hasVisibleChildren &&
+      isInKnownContainer &&
+      !isParentBody
+    );
+  }
+
+  /**
    * Checks if an element likely represents a distinct interaction
    * separate from its parent (if the parent is also interactive).
    */
@@ -919,7 +1097,6 @@
     if (!element || element.nodeType !== Node.ELEMENT_NODE) {
       return false;
     }
-
 
     const tagName = element.tagName.toLowerCase();
     const role = element.getAttribute('role');
@@ -949,28 +1126,35 @@
     if (element.hasAttribute('onclick') || typeof element.onclick === 'function') {
       return true;
     }
+    
     // Check for other common interaction event listeners
     try {
-      if (typeof getEventListeners === 'function') {
-        const listeners = getEventListeners(element);
-        const interactionEvents = ['mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change', 'input', 'focus', 'blur'];
+      const getEventListenersForNode = window.getEventListenersForNode;
+      if (typeof getEventListenersForNode === 'function') {
+        const listeners = getEventListenersForNode(element);
+        const interactionEvents = ['click', 'mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change', 'input', 'focus', 'blur'];
         for (const eventType of interactionEvents) {
-          if (listeners[eventType] && listeners[eventType].length > 0) {
-            return true; // Found a common interaction listener
+          for (const listener of listeners) {
+            if (listener.type === eventType) {
+               return true; // Found a common interaction listener
+            }
           }
         }
-      } else {
-        // Fallback: Check common event attributes if getEventListeners is not available
+      }
+      // Fallback: Check common event attributes if getEventListeners is not available (getEventListenersForNode doesn't work in page.evaluate context)
         const commonEventAttrs = ['onmousedown', 'onmouseup', 'onkeydown', 'onkeyup', 'onsubmit', 'onchange', 'oninput', 'onfocus', 'onblur'];
         if (commonEventAttrs.some(attr => element.hasAttribute(attr))) {
           return true;
         }
-      }
     } catch (e) {
       // console.warn(`Could not check event listeners for ${element.tagName}:`, e);
       // If checking listeners fails, rely on other checks
     }
 
+    // if the element is not strictly interactive but appears clickable based on heuristic signals
+    if (isHeuristicallyInteractive(element)) {
+      return true;
+    }
 
     // Default to false: if it's interactive but doesn't match above,
     // assume it triggers the same action as the parent.
@@ -1001,7 +1185,10 @@
     if (shouldHighlight) {
       // Check viewport status before assigning index and highlighting
       nodeData.isInViewport = isInExpandedViewport(node, viewportExpansion);
-      if (nodeData.isInViewport) {
+      
+      // When viewportExpansion is -1, all interactive elements should get a highlight index
+      // regardless of viewport status
+      if (nodeData.isInViewport || viewportExpansion === -1) {
         nodeData.highlightIndex = highlightIndex++;
 
         if (doHighlightElements) {
@@ -1026,6 +1213,13 @@
    * Creates a node data object for a given node and its descendants.
    */
   function buildDomTree(node, parentIframe = null, isParentHighlighted = false) {
+    // Fast rejection checks first
+    if (!node || node.id === HIGHLIGHT_CONTAINER_ID || 
+        (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.TEXT_NODE)) {
+      if (debugMode) PERF_METRICS.nodeMetrics.skippedNodes++;
+      return null;
+    }
+
     if (debugMode) PERF_METRICS.nodeMetrics.totalNodes++;
 
     if (!node || node.id === HIGHLIGHT_CONTAINER_ID) {
