@@ -9,7 +9,7 @@ from browser_use.telemetry.views import (
     ControllerRegisteredFunctionsTelemetryEvent,
     RegisteredFunction,
 )
-from supatest.browser.context import SupatestBrowserSession
+from supatest.browser.session import SupatestBrowserSession
 
 from supatest.controller.registry.views import SupatestActionModel, SupatestActionRegistry, SupatestRegisteredAction
 from browser_use.utils import time_execution_async, time_execution_sync

@@ -10,7 +10,7 @@ from browser_use.browser.browser import BrowserConfig
 
 from supatest.agent.service import SupatestAgent
 from supatest.controller.service import SupatestController
-from supatest.browser.context import SupatestBrowserSession
+from supatest.browser.session import SupatestBrowserSession
 
 logger = logging.getLogger("py_ws_server")
 

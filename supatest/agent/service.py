@@ -36,8 +36,7 @@ from browser_use.utils import time_execution_async
 from supatest.agent.views import SupatesAgentState, SupatestAgentOutput, SupatestAgentHistory, SupatestAgentHistoryList, SupatestActionResult
 from supatest.controller.registry.views import SupatestActionModel
 
-from supatest.browser.browser import SupatestBrowser
-from supatest.browser.context import SupatestBrowserSession
+from supatest.browser.session import SupatestBrowserSession
 from supatest.browser.views import SupatestBrowserState
 from supatest.controller.service import SupatestController
 from importlib import resources

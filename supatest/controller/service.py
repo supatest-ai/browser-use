@@ -11,7 +11,7 @@ from browser_use.controller.service import Controller
 from browser_use.utils import time_execution_sync
 from browser_use.browser import BrowserSession
 
-from supatest.browser.context import SupatestBrowserSession
+from supatest.browser.session import SupatestBrowserSession
 from supatest.agent.views import SupatestActionResult
 from supatest.controller.registry.service import SupatestRegistry
 from supatest.controller.views import (
@@ -152,17 +152,17 @@ class SupatestController(Controller[Context]):
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         # @self.registry.action('Switch tab', param_model=SwitchTabAction)
-        # async def switch_tab(params: SwitchTabAction, browser: SupatestBrowserContext):
-        #     await browser.switch_to_tab(params.page_id)
-        #     page = await browser.get_current_page()
+        # async def switch_tab(params: SwitchTabAction, browser_session: SupatestBrowserSession):
+        #     await browser_session.switch_to_tab(params.page_id)
+        #     page = await browser_session.get_current_page()
         #     await page.wait_for_load_state()
         #     msg = f'🔄  Switched to tab {params.page_id}'
         #     logger.info(msg)
         #     return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         # @self.registry.action('Open url in new tab', param_model=OpenTabAction)
-        # async def open_tab(params: OpenTabAction, browser: SupatestBrowserContext):
-        #     await browser.create_new_tab(params.url)
+        # async def open_tab(params: OpenTabAction, browser_session: SupatestBrowserSession):
+        #     await browser_session.create_new_tab(params.url)
         #     msg = f'🔗  Opened new tab with {params.url}'
         #     logger.info(msg)
         #     return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')

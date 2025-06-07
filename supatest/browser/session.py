@@ -108,7 +108,3 @@ class SupatestBrowserSession(BrowserSession):
         
         return page
 
-
-# Backward compatibility alias
-SupatestBrowserContext = SupatestBrowserSession
-
