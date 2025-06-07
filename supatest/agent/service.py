@@ -815,8 +815,13 @@ class SupatestAgent(Agent[Context]):
                     raise BrowserError(f'Element: {repr(element_node)} not found')
                 
                 locator_data = await element_handle.evaluate("el => window?.__agentLocatorGenerator__?.getLocatorData(el)", element_handle)
-                locator = locator_data['locator']
-                all_unique_locators = locator_data['allUniqueLocators']
+                if locator_data:
+                    locator = locator_data.get('locator')
+                    all_unique_locators = locator_data.get('allUniqueLocators')
+                else:
+                    logger.warning("locator_data is None - locator generator may not be available")
+                    locator = None
+                    all_unique_locators = None
                 logger.debug(f'Locator: {locator}')
                 logger.debug(f'All Unique Locators: {all_unique_locators}')
 
@@ -884,11 +889,20 @@ class SupatestAgent(Agent[Context]):
             # Get the action type and details from the current action
             action_type = next(iter(action))  # Get the action type (e.g., 'input_text', 'click_element')
             action_details = action[action_type]
+            
+            # Check if action_details is None (can happen due to model serialization issues)
+            if action_details is None:
+                logger.warning(f"Action details are None for action type: {action_type}")
+                return steps
 
             # Find and update the matching step
             for step in steps:
                 step_type = next(iter(step))
                 step_details = step[step_type]
+                
+                # Check if step_details is None
+                if step_details is None:
+                    continue
                 
                 # Match both the action type and the action details (using ID or other unique identifiers)
                 if (step_type == action_type and 
@@ -901,7 +915,18 @@ class SupatestAgent(Agent[Context]):
                     break
 
 
-            simplified_steps = [list(step.values())[0] for step in steps]
+            # Create simplified steps, handling cases where step values might be None
+            simplified_steps = []
+            for step in steps:
+                if step and len(step) > 0:
+                    step_values = list(step.values())
+                    if step_values and step_values[0] is not None:
+                        simplified_steps.append(step_values[0])
+                    else:
+                        logger.warning(f"Step has no valid values: {step}")
+                else:
+                    logger.warning(f"Empty or None step encountered: {step}")
+            
             # Send the updated steps via websocket
             await self._send_message("AGENT_STEP_EXECUTED", {
                 "steps": simplified_steps
@@ -969,8 +994,11 @@ class SupatestAgent(Agent[Context]):
                     
                 steps = []
                 for i, action in enumerate(model_output.action):
-                    step = action.model_dump(exclude_none=True)
-                    steps.append(step)
+                    if action is not None:
+                        step = action.model_dump(exclude_none=True)
+                        steps.append(step)
+                    else:
+                        logger.warning(f"Action at index {i} is None in model_output.action")
 
                 await self._send_message("AGENT_SUB_GOAL_UPDATE", {
                     "subgoalId": subgoal_id_str,
