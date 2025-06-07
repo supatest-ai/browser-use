@@ -456,9 +456,6 @@ class SupatestController(Controller[Context]):
                                 int(source_box['x'] + source_box['width'] / 2),
                                 int(source_box['y'] + source_box['height'] / 2)
                             )
-                except Exception as e:
-                    logger.debug(f"Error getting source coordinates: {e}")
-                    return None, None
 
                     # Get target coordinates
                     if target_position:
@@ -472,7 +469,6 @@ class SupatestController(Controller[Context]):
                             )
                 except Exception as e:
                     logger.debug(f"Error getting target coordinates: {e}")
-                    return source_coords, None
 
                 return source_coords, target_coords
 

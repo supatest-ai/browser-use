@@ -158,39 +158,6 @@ class SupatestRegistry(Registry[Context]):
         except Exception as e:
             raise RuntimeError(f'Error executing action {action_name}: {str(e)}') from e
         
-    def _replace_sensitive_data(self, params: BaseModel, sensitive_data: dict[str, str]) -> BaseModel:
-
-        """Replaces the sensitive data in the params"""
-        # if there are any str with <secret>placeholder</secret> in the params, replace them with the actual value from sensitive_data
-        import re
-
-        secret_pattern = re.compile(r'<secret>(.*?)</secret>')
-
-        def replace_secrets(value):
-            if isinstance(value, str):
-                matches = secret_pattern.findall(value)
-                for placeholder in matches:
-                    if placeholder in sensitive_data:
-                        value = value.replace(f'<secret>{placeholder}</secret>', sensitive_data[placeholder])
-                return value
-            elif isinstance(value, dict):
-                return {k: replace_secrets(v) for k, v in value.items()}
-            elif isinstance(value, list):
-                return [replace_secrets(v) for v in value]
-            return value
-
-        for key, value in params.model_dump().items():
-            params.__dict__[key] = replace_secrets(value)
-        return params
-
-    # def get_prompt_description(self, page=None) -> str:
-    #     """Get a description of all actions for the prompt
-
-	# 	If page is provided, only include actions that are available for that page
-	# 	based on their filter_func
-	# 	"""
-    #     return self.registry.get_prompt_description(page=page)
-    
     
     def get_prompt_description(self, page=None) -> str:
         """Get a description of all actions for the prompt

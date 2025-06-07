@@ -304,6 +304,10 @@ class SupatestAgent(Agent[Context]):
             # Get page-specific filtered actions
             page_filtered_actions = self.controller.registry.get_prompt_description(active_page)    
             
+            # Add sensitive data guidance if available - CRITICAL FOR SENSITIVE DATA REPLACEMENT
+            if self.sensitive_data:
+                self._message_manager.add_sensitive_data(active_page.url)
+            
             # If there are page-specific actions, add them as a special message for this step only
             if page_filtered_actions:
                 page_action_message = f'For this page, these additional actions are available:\n{page_filtered_actions}'
