@@ -12,7 +12,8 @@ class SupatestBrowser(Browser):
         **context_kwargs,
     ) -> SupatestBrowserSession:
         """Override new_context to return SupatestBrowserSession instead of BrowserContext"""
-        merged_config = {**self.config.browser_context_config.model_dump(), **context_kwargs}
+        # Since Browser is now BrowserSession, self.browser_profile contains the config
+        merged_config = {**self.browser_profile.model_dump(), **context_kwargs}
         
         return SupatestBrowserSession(config=BrowserContextConfig(**merged_config), browser=self)
 

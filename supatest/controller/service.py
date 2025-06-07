@@ -205,7 +205,8 @@ class SupatestController(Controller[Context]):
             return SupatestActionResult(extracted_content=msg, include_in_memory=True, isExecuted='success')
 
         @self.registry.action('Send keyboard keys', param_model=SendKeysAction)
-        async def send_keys(params: SendKeysAction, page: Page):
+        async def send_keys(params: SendKeysAction, browser_session: SupatestBrowserSession):
+            page = await browser_session.get_current_page()
             try:
                 await page.keyboard.press(params.keys)
             except Exception as e:
