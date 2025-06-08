@@ -1,8 +1,6 @@
-# Name of your application. Used to uniquely configure containers.
 minimum_version: 2.6.1
 service: web-agent
 primary_role: web
-# Name of the container image.
 image: staging/web-agent
 
 registry:
@@ -11,17 +9,14 @@ registry:
   password: <%= %x(aws ecr get-login-password --region ap-southeast-1) %>
 
 
-# Configure builder setup.
 builder:
   arch: amd64
-  args:
-    ENV: staging
   dockerfile: Dockerfile
 
 proxy:
   app_port: 8765
   healthcheck:
-    path: /
+    path: /health
     interval: 10
     timeout: 30
 

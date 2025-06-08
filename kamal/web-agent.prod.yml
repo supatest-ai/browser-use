@@ -1,7 +1,6 @@
 ssh:
   user: root
-  proxy_command: "ssh -W %h:%p -i digitalocean_staging.pem root@146.190.192.33"
-  keys: [ "digitalocean_staging.pem" ]
+  proxy_command: "ssh -W %h:%p root@146.190.192.33"
 
 servers:
   web:
@@ -9,3 +8,5 @@ servers:
     hosts:
       - 152.42.242.207
     
+proxy:
+  host: web-agent.supatest.ai

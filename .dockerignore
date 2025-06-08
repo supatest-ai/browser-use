@@ -1,5 +1,84 @@
+# Virtual environments
 .venv
+venv/
+
+# Python cache
 __pycache__
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Git
 .git
-.env 
+.gitignore
+.gitattributes
+
+# Environment files
+.env
+.env.*
+
+# Development and testing
+tests/
+test/
+*_test.py
+*test*.py
+conftest.py
+pytest.ini
+
+# Documentation
+docs/
+README.md
+SECURITY.md
+LICENSE
+*.md
+
+# Examples and evaluation
+examples/
+eval/
+kamal/
+
+# Development tools
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+makefile
+Makefile
+
+# Linting and formatting
+.pre-commit-config.yaml
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Package build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Project specific
+static/
+codebeaver.yml 
