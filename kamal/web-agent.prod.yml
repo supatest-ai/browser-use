@@ -7,6 +7,3 @@ servers:
     proxy: true
     hosts:
       - 152.42.242.207
-    
-proxy:
-  host: web-agent.supatest.ai
