@@ -4,6 +4,5 @@ ssh:
 
 servers:
   web:
-    proxy: true
     hosts:
       - 152.42.242.207

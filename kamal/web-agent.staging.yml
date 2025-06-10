@@ -1,0 +1,8 @@
+ssh:
+  user: root
+  proxy_command: 'ssh -W %h:%p root@34.142.171.163'
+
+servers:
+  web:
+    hosts:
+      - 10.0.0.7
