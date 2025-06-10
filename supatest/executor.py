@@ -197,7 +197,7 @@ class Executor:
                         "Azure-Content-Safety-Policy-Version": "2024-01-01",
                     }
                 },
-                temperature=0.7,
+                temperature=0.0,
             )
 
             # Build the agent
