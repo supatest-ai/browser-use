@@ -819,15 +819,8 @@ class SupatestAgent(Agent[Context]):
                     raise BrowserError(f'Element: {repr(element_node)} not found')
                 
                 locator_data = await element_handle.evaluate("el => window?.__agentLocatorGenerator__?.getLocatorData(el)", element_handle)
-                if locator_data:
-                    locator = locator_data.get('locator')
-                    all_unique_locators = locator_data.get('allUniqueLocators')
-                else:
-                    logger.warning("locator_data is None - locator generator may not be available")
-                    locator = None
-                    all_unique_locators = None
+                locator = locator_data['locator']
                 logger.debug(f'Locator: {locator}')
-                logger.debug(f'All Unique Locators: {all_unique_locators}')
 
             result = await self.controller.act(
                 action,
@@ -839,9 +832,8 @@ class SupatestAgent(Agent[Context]):
             )
 
             isExecuted = result.isExecuted 
-            if locator and all_unique_locators:
+            if locator:
                 action.set_locator(locator)
-                action.set_all_unique_locators(all_unique_locators)
 
             step = action.model_dump(exclude_none=True)
             
@@ -914,8 +906,6 @@ class SupatestAgent(Agent[Context]):
                     step[step_type]['isExecuted'] = is_executed
                     if action_details.get('locator'):
                         step[step_type]['locator'] = action_details.get('locator')
-                    if action_details.get('allUniqueLocators'):
-                        step[step_type]['allUniqueLocators'] = action_details.get('allUniqueLocators')  
                     break
 
 

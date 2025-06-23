@@ -27,7 +27,6 @@ class ClickElementAction(BaseModel):
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
     locator: Optional[str] = None
-    allUniqueLocators: Optional[list[dict]] = None
 
 class InputTextAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -37,7 +36,6 @@ class InputTextAction(BaseModel):
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
     locator: Optional[str] = None
-    allUniqueLocators: Optional[list[dict]] = None
 
 class DoneAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -78,7 +76,6 @@ class SelectDropdownOptionAction(BaseModel):
     title: Optional[str] = Field(None, description="Human readable description of what this action does")
     isExecuted: str = Field(default='pending')
     locator: Optional[str] = None
-    allUniqueLocators: Optional[list[dict]] = None
 
 class GetDropdownOptionsAction(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
