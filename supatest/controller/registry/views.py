@@ -44,8 +44,18 @@ class SupatestActionModel(BaseModel):
         if hasattr(action_params, 'locator'):
             action_params.locator = locator
             
-
-
+    def set_locator_english_value(self, locator_english_value: str):
+        """Set the locator_english_value for the action"""
+        # Get the action name and params
+        action_data = self.model_dump(exclude_unset=True)
+        if not action_data:
+            return
+        action_name = next(iter(action_data.keys()))
+        action_params = getattr(self, action_name)
+        
+        # Set the locator_english_value directly on the model
+        if hasattr(action_params, 'locatorEnglishValue'):
+            action_params.locatorEnglishValue = locator_english_value
 
 class SupatestRegisteredAction(RegisteredAction):
     """Extended version of RegisteredAction that formats actions in the supatest nested format"""

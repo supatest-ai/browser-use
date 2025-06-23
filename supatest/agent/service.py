@@ -736,7 +736,7 @@ class SupatestAgent(Agent[Context]):
             element_node = None
             action_index = action.get_index()
             locator: str | None = None
-            all_unique_locators: list[dict] | None = None
+            locator_english_value: str | None = None
             if action_index is not None:
                 if action_index not in await self.browser_context.get_selector_map():
                     message = f'Element index {action_index} does not exist - retry or use alternative actions'
@@ -754,7 +754,9 @@ class SupatestAgent(Agent[Context]):
                 
                 locator_data = await element_handle.evaluate("el => window?.__agentLocatorGenerator__?.getLocatorData(el)", element_handle)
                 locator = locator_data['locator']
+                locator_english_value = locator_data['locatorEnglishValue']
                 logger.debug(f'Locator: {locator}')
+                logger.debug(f'Locator English Value: {locator_english_value}')
 
             result = await self.controller.act(
                 action,
@@ -766,8 +768,10 @@ class SupatestAgent(Agent[Context]):
             )
 
             isExecuted = result.isExecuted 
-            if locator:
+            if locator and locator_english_value:
                 action.set_locator(locator)
+                action.set_locator_english_value(locator_english_value)
+                
 
             step = action.model_dump(exclude_none=True)
             
@@ -831,6 +835,8 @@ class SupatestAgent(Agent[Context]):
                     step[step_type]['isExecuted'] = is_executed
                     if action_details.get('locator'):
                         step[step_type]['locator'] = action_details.get('locator')
+                    if action_details.get('locatorEnglishValue'):
+                        step[step_type]['locatorEnglishValue'] = action_details.get('locatorEnglishValue')
                     break
 
 
