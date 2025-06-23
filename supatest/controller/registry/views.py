@@ -44,19 +44,7 @@ class SupatestActionModel(BaseModel):
         if hasattr(action_params, 'locator'):
             action_params.locator = locator
             
-        
-    def set_all_unique_locators(self, all_unique_locators: list[dict]):
-        """Set the all_unique_locators for the action"""
-        # Get the action name and params
-        action_data = self.model_dump(exclude_unset=True)
-        if not action_data:
-            return  
-        action_name = next(iter(action_data.keys()))
-        action_params = getattr(self, action_name)
-        
-        # Set the all_unique_locators directly on the model
-        if hasattr(action_params, 'allUniqueLocators'):
-            action_params.allUniqueLocators = all_unique_locators
+
 
 
 class SupatestRegisteredAction(RegisteredAction):
