@@ -50,3 +50,4 @@ tmp
 
 aws_staging.pem
 digitalocean_staging.pem
+gcp_staging.pem
