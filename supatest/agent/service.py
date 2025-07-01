@@ -753,10 +753,15 @@ class SupatestAgent(Agent[Context]):
                     raise BrowserError(f'Element: {repr(element_node)} not found')
                 
                 locator_data = await element_handle.evaluate("el => window?.__agentLocatorGenerator__?.getLocatorData(el)", element_handle)
-                locator = locator_data['locator']
-                locator_english_value = locator_data['locatorEnglishValue']
-                logger.debug(f'Locator: {locator}')
-                logger.debug(f'Locator English Value: {locator_english_value}')
+                if locator_data is not None:
+                    locator = locator_data['locator']
+                    locator_english_value = locator_data['locatorEnglishValue']
+                else:
+                    logger.warning("agentLocatorGenerator not available - locator data will be None")
+                    locator = None
+                    locator_english_value = None
+                logger.info(f'🌟 Locator for action {i + 1}/{len(actions)}: {locator}')
+                logger.info(f'🌟 Locator English Value for action {i + 1}/{len(actions)}: {locator_english_value}')
 
             result = await self.controller.act(
                 action,
