@@ -8,7 +8,6 @@ registry:
   username: AWS
   password: <%= %x(aws ecr get-login-password --region ap-southeast-1) %>
 
-
 builder:
   arch: amd64
   dockerfile: Dockerfile
@@ -27,5 +26,8 @@ env:
     - AZURE_OPENAI_ENDPOINT
     - LMNR_PROJECT_API_KEY
     - AUTOMATION_BASE_URL
+    - BROWSER_USE_LOGGING_LEVEL
+    - ANONYMIZED_TELEMETRY
+    - LMNR_PROJECT_API_KEY
   clear:
     PORT: 8765

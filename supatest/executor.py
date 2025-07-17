@@ -189,7 +189,7 @@ class Executor:
             
             # Initialize agent with modified AzureChatOpenAI settings
             model = AzureChatOpenAI(
-                model="gpt-4o",
+                model="o4-mini",
                 api_version="2024-10-21",
                 model_kwargs={
                     "extra_headers": {
@@ -197,7 +197,7 @@ class Executor:
                         "Azure-Content-Safety-Policy-Version": "2024-01-01",
                     }
                 },
-                temperature=0.0,
+                temperature=1,
             )
 
             # Build the agent
