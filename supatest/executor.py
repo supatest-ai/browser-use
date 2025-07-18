@@ -190,7 +190,7 @@ class Executor:
             # Initialize agent with modified AzureChatOpenAI settings
             model = AzureChatOpenAI(
                 model="o4-mini",
-                api_version="2024-10-21",
+                api_version="2024-12-01-preview",
                 model_kwargs={
                     "extra_headers": {
                         "Azure-Content-Safety-Action": "warn",
