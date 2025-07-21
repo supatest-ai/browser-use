@@ -183,6 +183,7 @@ class Executor:
                 cdp_url=connection_url,
                 headless=False,
                 active_page_id=active_page_id,
+                window_size={'width': 1440, 'height': 900}
             )
 
             controller = SupatestController(exclude_actions=['search_google', 'extract_content', 'scroll_to_text'])
